@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>定量降水預報 · 指定地點</title>
+<meta name="apple-mobile-web-app-title" content="降水點位">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="apple-touch-icon.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+  <form id="locForm">
+    <input id="locInput" type="text" inputmode="text" autocomplete="off"
+           placeholder="貼 Google Maps 網址，或 25.11, 121.92">
+    <button type="submit">定位</button>
+  </form>
+  <p id="locStatus"></p>
+</header>
+
+<div id="timestamp" class="crop" hidden><img alt="發布時間與有效時間"></div>
+
+<main id="stage">
+  <div id="viewport">
+    <img id="map" alt="定量降水預報圖">
+    <div id="pin" hidden><span></span></div>
+    <div id="overlayMsg" hidden></div>
+  </div>
+  <aside id="legendPane" hidden>
+    <div id="legend" class="crop"><img alt="降水量色階"></div>
+    <p>毫米</p>
+  </aside>
+</main>
+
+<nav id="frames"></nav>
+
+<footer>
+  <button id="resetView" type="button">全台</button>
+  <span>資料來源：<a href="https://www.cwa.gov.tw/V8/C/P/QPF.html" target="_blank" rel="noopener">中央氣象署</a></span>
+</footer>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

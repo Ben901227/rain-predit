@@ -1,0 +1,239 @@
+:root {
+  --bg: #10161d;
+  --panel: #1a232d;
+  --line: #2c3947;
+  --text: #e6edf3;
+  --muted: #93a4b5;
+  --accent: #4aa8ff;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overscroll-behavior: none;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.5 -apple-system, "Noto Sans TC", "PingFang TC", sans-serif;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+           env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+header {
+  flex: 0 0 auto;
+  padding: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+#locForm {
+  display: flex;
+  gap: 6px;
+}
+
+#locInput {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 16px; /* 小於 16px 時 iOS Safari 會自動放大 */
+}
+
+button {
+  padding: 9px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+button:active { background: #26313d; }
+
+#locForm button { border-color: var(--accent); color: var(--accent); }
+
+#locStatus {
+  margin: 6px 2px 0;
+  min-height: 1.2em;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+#locStatus.error { color: #ff8b7a; }
+#locStatus.warn { color: #ffc861; }
+#locStatus a { color: var(--accent); }
+
+.crop {
+  position: relative;
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+
+.crop img {
+  position: absolute;
+  max-width: none;
+  /* 兩張裁切圖與主圖同源，瀏覽器快取後不會重新下載 */
+}
+
+#timestamp {
+  margin: 6px auto 4px;
+  border-radius: 4px;
+  background: #fff;
+}
+
+#stage {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  gap: 6px;
+  padding: 0 6px;
+}
+
+#viewport {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #eaf4fb;
+  touch-action: none;
+  cursor: grab;
+}
+
+#map {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1245px;
+  height: 1500px;
+  transform-origin: 0 0;
+  max-width: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+#pin {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+/* 十字準星：白色外框確保在任何色階上都看得見 */
+#pin::before, #pin::after {
+  content: "";
+  position: absolute;
+  background: #111;
+  box-shadow: 0 0 0 2px #fff;
+}
+#pin::before { left: -17px; top: -1px; width: 34px; height: 2px; }
+#pin::after { left: -1px; top: -17px; width: 2px; height: 34px; }
+
+#pin span {
+  position: absolute;
+  left: -5px;
+  top: -5px;
+  width: 10px;
+  height: 10px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #111;
+}
+
+#overlayMsg {
+  position: absolute;
+  inset: auto 8px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(16, 22, 29, 0.88);
+  color: var(--text);
+  font-size: 13px;
+  text-align: center;
+}
+
+#legendPane {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+#legend {
+  border-radius: 4px;
+  background: #fff;
+}
+
+#legendPane p {
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+#frames {
+  flex: 0 0 auto;
+  padding: 8px 6px 2px;
+}
+
+.frame-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.frame-row::-webkit-scrollbar { display: none; }
+
+.frame-tag {
+  flex: 0 0 auto;
+  width: 3.4em;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.frame-row button {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 7px 2px;
+  font-size: 13px;
+}
+
+.frame-row button.active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #06121e;
+  font-weight: 600;
+}
+
+footer {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+footer button { padding: 6px 12px; font-size: 12px; }
+footer a { color: var(--muted); }
+
+[hidden] { display: none !important; }

@@ -1,0 +1,4 @@
+# 校正用的輸入與輸出，見 calibrate.py 開頭的取得方式
+data/
+__pycache__/
+.DS_Store
