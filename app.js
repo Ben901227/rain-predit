@@ -21,6 +21,7 @@ const locForm = $('#locForm');
 const locInput = $('#locInput');
 const locStatus = $('#locStatus');
 const resultList = $('#results');
+const clearInput = $('#clearInput');
 
 const token = cacheBustToken(new Date());
 const state = {
@@ -45,11 +46,16 @@ function applyCrop(container, box, scale) {
 
 function layoutCrops() {
   const stageH = $('#stage').clientHeight;
-  // 扣掉「毫米」標籤的高度，否則色階會被 #stage 裁掉底部
-  const legendScale = clamp((stageH - 18) / (CROP_LEGEND.y1 - CROP_LEGEND.y0), 0.25, 0.7);
+  const availW = $('#app').clientWidth - 16;
+  // 扣掉「毫米」標籤的高度，否則色階會被 #stage 裁掉底部；
+  // 另外限制寬度佔比，色階再高也不該把地圖擠掉
+  const legendW = CROP_LEGEND.x1 - CROP_LEGEND.x0;
+  const legendScale = Math.min(
+    clamp((stageH - 18) / (CROP_LEGEND.y1 - CROP_LEGEND.y0), 0.25, 0.7),
+    (availW * 0.18) / legendW,
+  );
   applyCrop(legendBox, CROP_LEGEND, legendScale);
 
-  const availW = document.body.clientWidth - 16;
   const tsScale = clamp(availW / (CROP_TIMESTAMP.x1 - CROP_TIMESTAMP.x0), 0.2, 0.55);
   applyCrop(timestampBox, CROP_TIMESTAMP, tsScale);
 }
@@ -272,10 +278,17 @@ function applyTarget(target) {
   }
   state.target = target;
   localStorage.setItem(STORE_KEY, JSON.stringify(target));
-  const prefix = target.label ? `${target.label} · ` : '';
-  setStatus(`${prefix}${formatCoords(target.lat, target.lon)}`, '');
+  const coords = formatCoords(target.lat, target.lon);
+  // 輸入框反映目前的地點，貼進來的長網址不留在框裡
+  setInput(target.label || coords);
+  setStatus(target.label ? `${target.label} · ${coords}` : coords, '');
   fitWhole(); // 維持全台視野，放大交給雙擊或雙指
   return true;
+}
+
+function setInput(value) {
+  locInput.value = value;
+  clearInput.hidden = !value;
 }
 
 function clearResults() {
@@ -360,6 +373,17 @@ locForm.addEventListener('submit', (e) => {
     return;
   }
   if (applyTarget(parsed)) locInput.blur();
+});
+
+locInput.addEventListener('input', () => {
+  clearInput.hidden = !locInput.value;
+});
+
+clearInput.addEventListener('click', () => {
+  setInput('');
+  clearResults();
+  setStatus('', '');
+  locInput.focus();
 });
 
 $('#resetView').addEventListener('click', fitWhole);

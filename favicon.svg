@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- 雨滴＝降水，中央的白點＝指定地點。深淺色底都看得清楚。 -->
+  <defs>
+    <linearGradient id="drop" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6fc0ff"/>
+      <stop offset="1" stop-color="#2b7fd4"/>
+    </linearGradient>
+  </defs>
+  <path d="M16 2.5c0 0 10.5 11.6 10.5 17.6a10.5 10.5 0 0 1-21 0C5.5 14.1 16 2.5 16 2.5z"
+        fill="url(#drop)"/>
+  <circle cx="16" cy="20.1" r="5.2" fill="#fff" opacity=".22"/>
+  <circle cx="16" cy="20.1" r="3.4" fill="#fff"/>
+</svg>

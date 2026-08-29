@@ -5,45 +5,53 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0d1319">
 <title>定量降水預報 · 指定地點</title>
 <meta name="apple-mobile-web-app-title" content="降水點位">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
-<link rel="icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-<header>
-  <form id="locForm">
-    <input id="locInput" type="text" inputmode="text" autocomplete="off"
-           placeholder="貼 Google Maps 網址，或 25.11, 121.92">
-    <button type="submit">定位</button>
-  </form>
-  <p id="locStatus"></p>
-  <ul id="results" hidden></ul>
-</header>
+<div id="app">
 
-<div id="timestamp" class="crop" hidden><img alt="發布時間與有效時間"></div>
+  <header>
+    <form id="locForm">
+      <div class="field">
+        <input id="locInput" type="text" inputmode="text" autocomplete="off"
+               placeholder="搜尋地名，或貼網址／座標">
+        <button id="clearInput" type="button" aria-label="清除" hidden>✕</button>
+      </div>
+      <button type="submit">定位</button>
+    </form>
+    <p id="locStatus"></p>
+    <ul id="results" hidden></ul>
+  </header>
 
-<main id="stage">
-  <div id="viewport">
-    <img id="map" alt="定量降水預報圖">
-    <div id="pin" hidden><span></span></div>
-    <div id="overlayMsg" hidden></div>
-  </div>
-  <aside id="legendPane" hidden>
-    <div id="legend" class="crop"><img alt="降水量色階"></div>
-    <p>毫米</p>
-  </aside>
-</main>
+  <div id="timestamp" class="crop" hidden><img alt="發布時間與有效時間"></div>
 
-<nav id="frames"></nav>
+  <main id="stage">
+    <div id="viewport">
+      <img id="map" alt="定量降水預報圖">
+      <div id="pin" hidden><span></span></div>
+      <div id="overlayMsg" hidden></div>
+    </div>
+    <aside id="legendPane" hidden>
+      <div id="legend" class="crop"><img alt="降水量色階"></div>
+      <p>毫米</p>
+    </aside>
+  </main>
 
-<footer>
-  <button id="resetView" type="button">全台</button>
-  <span>預報圖：<a href="https://www.cwa.gov.tw/V8/C/P/QPF.html" target="_blank" rel="noopener">中央氣象署</a>
-  · 地點搜尋：<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a></span>
-</footer>
+  <nav id="frames"></nav>
+
+  <footer>
+    <button id="resetView" type="button">全台</button>
+    <span>預報圖：<a href="https://www.cwa.gov.tw/V8/C/P/QPF.html" target="_blank" rel="noopener">中央氣象署</a>
+    · 地點搜尋：<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a></span>
+  </footer>
+
+</div>
 
 <script type="module" src="app.js"></script>
 </body>

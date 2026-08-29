@@ -1,10 +1,14 @@
 :root {
-  --bg: #10161d;
-  --panel: #1a232d;
-  --line: #2c3947;
-  --text: #e6edf3;
+  --page: #070b10;
+  --bg: #0d1319;
+  --panel: #18212b;
+  --panel-hi: #22303f;
+  --line: #2a3745;
+  --text: #e8eff6;
   --muted: #93a4b5;
   --accent: #4aa8ff;
+  --danger: #ff8b7a;
+  --radius: 10px;
 }
 
 * { box-sizing: border-box; }
@@ -16,71 +20,122 @@ html, body {
 }
 
 body {
-  display: flex;
-  flex-direction: column;
   height: 100dvh;
-  background: var(--bg);
+  background: var(--page);
   color: var(--text);
   font: 15px/1.5 -apple-system, "Noto Sans TC", "PingFang TC", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 手機優先的單欄版面；桌機收窄置中，不讓搜尋列與按鈕整條拉滿 */
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-width: 680px;
+  margin: 0 auto;
+  background: var(--bg);
   padding: env(safe-area-inset-top) env(safe-area-inset-right)
            env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
+@media (min-width: 681px) {
+  #app { border-inline: 1px solid var(--line); }
+}
+
 header {
   flex: 0 0 auto;
-  padding: 8px;
+  padding: 10px 10px 8px;
   border-bottom: 1px solid var(--line);
 }
 
 #locForm {
   display: flex;
-  gap: 6px;
+  gap: 8px;
+}
+
+.field {
+  position: relative;
+  flex: 1;
+  min-width: 0;
 }
 
 #locInput {
-  flex: 1;
-  min-width: 0;
-  padding: 9px 10px;
+  width: 100%;
+  padding: 10px 34px 10px 12px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: var(--panel);
   color: var(--text);
   font-size: 16px; /* 小於 16px 時 iOS Safari 會自動放大 */
 }
 
+#locInput::placeholder { color: #6f8296; }
+
+#locInput:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(74, 168, 255, 0.18);
+}
+
+#clearInput {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1;
+}
+
+#clearInput:active { background: var(--panel-hi); }
+
 button {
-  padding: 9px 14px;
+  padding: 10px 14px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: var(--panel);
   color: var(--text);
   font: inherit;
   cursor: pointer;
 }
 
-button:active { background: #26313d; }
+button:active { background: var(--panel-hi); }
 
-#locForm button { border-color: var(--accent); color: var(--accent); }
+#locForm button[type="submit"] {
+  flex: 0 0 auto;
+  border-color: rgba(74, 168, 255, 0.5);
+  color: var(--accent);
+  font-weight: 600;
+}
 
 #locStatus {
-  margin: 6px 2px 0;
-  min-height: 1.2em;
+  margin: 8px 2px 0;
+  min-height: 1.25em;
   font-size: 13px;
   color: var(--muted);
 }
 
-#locStatus.error { color: #ff8b7a; }
+#locStatus:empty { margin: 0; min-height: 0; }
+#locStatus.error { color: var(--danger); }
 #locStatus.warn { color: #ffc861; }
 #locStatus a { color: var(--accent); }
 
 #results {
-  margin: 6px 0 0;
+  margin: 8px 0 0;
   padding: 0;
   list-style: none;
-  max-height: 40dvh;
+  max-height: 38dvh;
   overflow-y: auto;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius);
+  background: var(--panel);
 }
 
 #results li + li { border-top: 1px solid var(--line); }
@@ -89,18 +144,24 @@ button:active { background: #26313d; }
   display: block;
   width: 100%;
   min-height: 44px; /* 觸控目標 */
+  padding: 9px 12px;
   border: 0;
   border-radius: 0;
   background: none;
   text-align: left;
 }
 
-#results strong { display: block; font-size: 14px; font-weight: 600; }
+#results strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+}
 
 #results span {
   display: block;
+  margin-top: 1px;
   font-size: 11px;
-  line-height: 1.35;
+  line-height: 1.4;
   color: var(--muted);
 }
 
@@ -117,8 +178,8 @@ button:active { background: #26313d; }
 }
 
 #timestamp {
-  margin: 6px auto 4px;
-  border-radius: 4px;
+  margin: 8px auto 6px;
+  border-radius: 6px;
   background: #fff;
 }
 
@@ -126,8 +187,20 @@ button:active { background: #26313d; }
   flex: 1;
   display: flex;
   min-height: 0;
-  gap: 6px;
-  padding: 0 6px;
+  gap: 8px;
+  padding: 0 8px;
+  overflow: hidden; /* 空間不足時色階不要溢出到時距按鈕上 */
+}
+
+/* 橫向手機的高度非常有限，把周邊壓到最小，空間留給地圖與色階 */
+@media (max-height: 460px) {
+  header { padding: 6px 8px 5px; }
+  #locStatus { margin-top: 5px; font-size: 12px; }
+  #timestamp { display: none; } /* 時間文字在地圖圖檔裡本來就有一份 */
+  #frames { padding: 6px 8px 2px; }
+  .frame-row { gap: 3px; margin-bottom: 4px; }
+  .frame-row button { padding: 5px 2px; font-size: 12px; }
+  footer { padding: 2px 10px 6px; }
 }
 
 #viewport {
@@ -135,7 +208,8 @@ button:active { background: #26313d; }
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  border-radius: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
   background: #eaf4fb;
   touch-action: none;
   cursor: grab;
@@ -191,8 +265,8 @@ button:active { background: #26313d; }
   justify-content: center;
   gap: 10px;
   padding: 8px 12px;
-  border-radius: 8px;
-  background: rgba(16, 22, 29, 0.88);
+  border-radius: var(--radius);
+  background: rgba(13, 19, 25, 0.9);
   color: var(--text);
   font-size: 13px;
   text-align: center;
@@ -206,7 +280,7 @@ button:active { background: #26313d; }
 }
 
 #legend {
-  border-radius: 4px;
+  border-radius: 6px;
   background: #fff;
 }
 
@@ -218,39 +292,39 @@ button:active { background: #26313d; }
 
 #frames {
   flex: 0 0 auto;
-  padding: 8px 6px 2px;
+  padding: 10px 8px 4px;
 }
 
+/* 兩排共用同一組欄位，+12／+24 等 12 小時按鈕各佔兩格，
+   右緣就會對齊同一時間點的 6 小時按鈕，形成一條時間軸。 */
 .frame-row {
-  display: flex;
-  align-items: center;
+  display: grid;
+  grid-template-columns: 3.1em repeat(8, 1fr);
   gap: 4px;
   margin-bottom: 6px;
-  overflow-x: auto;
-  scrollbar-width: none;
 }
 
-.frame-row::-webkit-scrollbar { display: none; }
+.frame-row + .frame-row button { grid-column: span 2; }
 
 .frame-tag {
-  flex: 0 0 auto;
-  width: 3.4em;
+  align-self: center;
   font-size: 11px;
   color: var(--muted);
 }
 
 .frame-row button {
-  flex: 1 1 auto;
   min-width: 0;
-  padding: 7px 2px;
+  padding: 8px 2px;
+  border-radius: 8px;
   font-size: 13px;
+  font-variant-numeric: tabular-nums;
 }
 
 .frame-row button.active {
   border-color: var(--accent);
   background: var(--accent);
   color: #06121e;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 footer {
@@ -258,13 +332,14 @@ footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding: 4px 8px 8px;
+  gap: 10px;
+  padding: 4px 10px 10px;
   font-size: 12px;
   color: var(--muted);
 }
 
-footer button { padding: 6px 12px; font-size: 12px; }
+footer button { padding: 7px 13px; font-size: 12px; }
+footer span { text-align: right; }
 footer a { color: var(--muted); }
 
 [hidden] { display: none !important; }
