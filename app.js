@@ -55,6 +55,10 @@ function layoutCrops() {
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
+// 使用者拖曳或縮放過之後，版面變動只平移視野；否則重新套用預設視野。
+// 色階與時間列是圖片載入後才出現的，會縮小 viewport，這時必須重算而不是沿用舊倍率。
+let userAdjusted = false;
+
 function minScale() {
   return Math.min(viewport.clientWidth / IMG_W, viewport.clientHeight / IMG_H);
 }
@@ -89,12 +93,14 @@ function renderPin() {
 }
 
 function fitWhole() {
+  userAdjusted = false;
   state.scale = minScale();
   render();
 }
 
 function focusTarget() {
   if (!state.target) return fitWhole();
+  userAdjusted = false;
   const p = lonLatToPixel(state.target.lon, state.target.lat);
   const wanted = viewport.clientWidth / (FOCUS_SPAN_DEG * PX_PER_DEG_LON);
   state.scale = clamp(wanted, minScale(), MAX_SCALE);
@@ -104,6 +110,7 @@ function focusTarget() {
 }
 
 function zoomAbout(factor, cx, cy) {
+  userAdjusted = true;
   const next = clamp(state.scale * factor, minScale(), MAX_SCALE);
   const ratio = next / state.scale;
   state.tx = cx - (cx - state.tx) * ratio;
@@ -135,6 +142,7 @@ viewport.addEventListener('pointermove', (e) => {
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
   if (pointers.size === 1) {
+    userAdjusted = true;
     state.tx += e.clientX - prev.x;
     state.ty += e.clientY - prev.y;
     render();
@@ -219,7 +227,7 @@ function setFrame(kind, hour) {
     timestampBox.hidden = false;
     legendPane.hidden = false;
     hideOverlay();
-    layoutCrops();
+    relayout(); // 時間列與色階首次出現會壓縮 #stage
   };
   pre.onerror = () => {
     showOverlay(`+${hour} 小時的 ${kind} 小時累積圖目前無法取得`, () => setFrame(kind, hour));
@@ -249,6 +257,7 @@ function hideOverlay() {
 function setStatus(text, tone) {
   locStatus.textContent = text;
   locStatus.className = tone || '';
+  relayout(); // 訊息換行會改變 #stage 高度
 }
 
 function applyTarget(target, { focus = true } = {}) {
@@ -272,14 +281,14 @@ locForm.addEventListener('submit', (e) => {
     return;
   }
   if (parsed.needsExpand) {
-    locStatus.className = 'error';
-    locStatus.textContent = '短網址無法在瀏覽器裡展開。';
+    setStatus('短網址無法在瀏覽器裡展開。', 'error');
     const a = document.createElement('a');
     a.href = parsed.needsExpand;
     a.target = '_blank';
     a.rel = 'noopener';
     a.textContent = '點此開啟，再把跳轉後的完整網址複製回來';
     locStatus.append(' ', a);
+    relayout();
     return;
   }
   if (applyTarget(parsed)) locInput.blur();
@@ -293,25 +302,40 @@ function restore() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORE_KEY));
     if (saved && Number.isFinite(saved.lat) && Number.isFinite(saved.lon)) {
-      return applyTarget(saved, { focus: false });
+      applyTarget(saved, { focus: false }); // 視野交給隨後的 relayout 決定
     }
   } catch {
     // 壞掉的紀錄直接忽略
   }
-  return false;
 }
 
+/**
+ * 重算版面。回傳 false 代表 viewport 還沒有尺寸 — 此時算出的縮放倍率會是 0，必須稍後重試。
+ */
+function relayout() {
+  layoutCrops();
+  const vw = viewport.clientWidth;
+  const vh = viewport.clientHeight;
+  if (!vw || !vh) return false;
+  if (userAdjusted && lastVW) {
+    // 原本在畫面中央的地圖點維持在中央，否則旋轉手機後看的位置會跑掉
+    state.tx += (vw - lastVW) / 2;
+    state.ty += (vh - lastVH) / 2;
+    render();
+  } else {
+    focusTarget(); // 沒有地點時會退回全台視野
+  }
+  lastVW = vw;
+  lastVH = vh;
+  return true;
+}
+
+let lastVW = 0;
+let lastVH = 0;
+
 buildFrames();
-const hadTarget = restore();
+restore();
 setFrame(6, 6);
 
-// 觀察 #stage 而非 window：狀態列換行、鍵盤彈出、旋轉都會改變可用高度。
-// 初始視野也由它決定 — 版面尚未配置時 viewport 為 0，這時算出的縮放倍率會是 0。
-let viewReady = false;
-new ResizeObserver(() => {
-  layoutCrops();
-  if (viewReady) return render();
-  if (!viewport.clientWidth || !viewport.clientHeight) return;
-  viewReady = true;
-  hadTarget ? focusTarget() : fitWhole();
-}).observe($('#stage'));
+if (!relayout()) window.addEventListener('load', relayout, { once: true });
+window.addEventListener('resize', relayout);
