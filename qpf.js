@@ -76,8 +76,8 @@ function placeName(text) {
 }
 
 /**
- * 解析使用者貼上的內容。
- * 回傳 {lat, lon, label} | {needsExpand: url} | null
+ * 解析使用者輸入的內容。
+ * 回傳 {lat, lon, label} | {needsExpand: url} | {query: text} | null
  */
 export function parseLocation(input) {
   const text = (input || '').trim();
@@ -85,21 +85,50 @@ export function parseLocation(input) {
 
   if (SHORT_LINK.test(text)) return { needsExpand: text };
 
+  const isUrl = /https?:\/\//i.test(text);
   const label = placeName(text);
 
   // Google Maps 的 !3d<lat>!4d<lon> 是地點本身的座標，比視野中心 @ 更準確。
   let m = text.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/);
   if (!m) m = text.match(/[?&](?:q|ll|daddr|destination)=(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/);
   if (!m) m = text.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
-  if (!m && !/https?:\/\//i.test(text)) {
+  if (!m && !isUrl) {
     m = text.match(/^(-?\d+(?:\.\d+)?)\s*[,\s]\s*(-?\d+(?:\.\d+)?)$/);
   }
-  if (!m) return null;
+  // 抓不到座標的網址是壞掉的網址，不是地名，不該拿去搜尋
+  if (!m) return isUrl ? null : { query: text };
 
   const lat = parseFloat(m[1]);
   const lon = parseFloat(m[2]);
   if (!valid(lat, lon)) return null;
   return { lat, lon, label };
+}
+
+const GEOCODE_ENDPOINT = 'https://nominatim.openstreetmap.org/search';
+
+export function geocodeUrl(query) {
+  const params = new URLSearchParams({
+    q: query,
+    format: 'jsonv2',
+    countrycodes: 'tw',
+    limit: '8',
+    'accept-language': 'zh-TW',
+  });
+  return `${GEOCODE_ENDPOINT}?${params}`;
+}
+
+/** 把 Nominatim jsonv2 的回應整理成 {lat, lon, label, detail}。 */
+export function parseGeocodeResults(json) {
+  if (!Array.isArray(json)) return [];
+  return json.flatMap((item) => {
+    const lat = parseFloat(item.lat);
+    const lon = parseFloat(item.lon);
+    if (!valid(lat, lon)) return [];
+    const detail = (item.display_name || '').trim();
+    const label = (item.name || '').trim() || detail.split(',')[0].trim();
+    if (!label) return [];
+    return [{ lat, lon, label, detail }];
+  });
 }
 
 export function formatCoords(lat, lon) {

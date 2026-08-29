@@ -73,6 +73,37 @@ button:active { background: #26313d; }
 #locStatus.warn { color: #ffc861; }
 #locStatus a { color: var(--accent); }
 
+#results {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  max-height: 40dvh;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+#results li + li { border-top: 1px solid var(--line); }
+
+#results button {
+  display: block;
+  width: 100%;
+  min-height: 44px; /* 觸控目標 */
+  border: 0;
+  border-radius: 0;
+  background: none;
+  text-align: left;
+}
+
+#results strong { display: block; font-size: 14px; font-weight: 600; }
+
+#results span {
+  display: block;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
 .crop {
   position: relative;
   overflow: hidden;

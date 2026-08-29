@@ -1,6 +1,7 @@
 import {
   IMG_W, IMG_H, FRAMES, CROP_LEGEND, CROP_TIMESTAMP, PX_PER_DEG_LON,
   lonLatToPixel, isInRange, cacheBustToken, frameUrl, parseLocation, formatCoords,
+  geocodeUrl, parseGeocodeResults,
 } from './qpf.js';
 
 const STORE_KEY = 'rain-predit.location';
@@ -19,11 +20,13 @@ const framesNav = $('#frames');
 const locForm = $('#locForm');
 const locInput = $('#locInput');
 const locStatus = $('#locStatus');
+const resultList = $('#results');
 
 const token = cacheBustToken(new Date());
 const state = {
   frame: { kind: 6, hour: 6 },
   target: null,
+  view: 'fit', // 'fit' 全台 | 'focus' 放大到點位
   scale: 1,
   tx: 0,
   ty: 0,
@@ -94,6 +97,7 @@ function renderPin() {
 
 function fitWhole() {
   userAdjusted = false;
+  state.view = 'fit';
   state.scale = minScale();
   render();
 }
@@ -101,6 +105,7 @@ function fitWhole() {
 function focusTarget() {
   if (!state.target) return fitWhole();
   userAdjusted = false;
+  state.view = 'focus';
   const p = lonLatToPixel(state.target.lon, state.target.lat);
   const wanted = viewport.clientWidth / (FOCUS_SPAN_DEG * PX_PER_DEG_LON);
   state.scale = clamp(wanted, minScale(), MAX_SCALE);
@@ -260,7 +265,7 @@ function setStatus(text, tone) {
   relayout(); // 訊息換行會改變 #stage 高度
 }
 
-function applyTarget(target, { focus = true } = {}) {
+function applyTarget(target) {
   if (!isInRange(target.lon, target.lat)) {
     setStatus('這個位置在預報圖範圍之外。', 'error');
     return false;
@@ -269,17 +274,80 @@ function applyTarget(target, { focus = true } = {}) {
   localStorage.setItem(STORE_KEY, JSON.stringify(target));
   const prefix = target.label ? `${target.label} · ` : '';
   setStatus(`${prefix}${formatCoords(target.lat, target.lon)}`, '');
-  if (focus) focusTarget(); else renderPin();
+  fitWhole(); // 維持全台視野，放大交給雙擊或雙指
   return true;
+}
+
+function clearResults() {
+  resultList.replaceChildren();
+  resultList.hidden = true;
+}
+
+function showResults(places) {
+  resultList.replaceChildren(...places.map((place) => {
+    const li = document.createElement('li');
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    const name = document.createElement('strong');
+    name.textContent = place.label;
+    const detail = document.createElement('span');
+    detail.textContent = place.detail;
+    btn.append(name, detail);
+    btn.addEventListener('click', () => {
+      clearResults();
+      applyTarget({ lat: place.lat, lon: place.lon, label: place.label });
+    });
+    li.append(btn);
+    return li;
+  }));
+  resultList.hidden = false;
+  relayout(); // 清單會改變 #stage 高度
+}
+
+let searchSeq = 0;
+
+async function runSearch(query) {
+  const seq = ++searchSeq;
+  clearResults();
+  setStatus('搜尋中…', '');
+  let places;
+  try {
+    const res = await fetch(geocodeUrl(query));
+    if (!res.ok) throw new Error(res.status);
+    places = parseGeocodeResults(await res.json());
+  } catch {
+    if (seq === searchSeq) setStatus('搜尋失敗，請稍後再試，或直接輸入座標。', 'error');
+    return;
+  }
+  if (seq !== searchSeq) return; // 已有更新的搜尋，這筆結果過期了
+
+  if (!places.length) {
+    setStatus(`找不到「${query}」。可以換個說法，或貼 Google Maps 網址。`, 'error');
+    return;
+  }
+  const inRange = places.filter((p) => isInRange(p.lon, p.lat)).slice(0, 5);
+  if (!inRange.length) {
+    setStatus(`「${query}」的搜尋結果都在預報圖範圍之外。`, 'error');
+    return;
+  }
+  setStatus('選一個地點：', '');
+  showResults(inRange);
 }
 
 locForm.addEventListener('submit', (e) => {
   e.preventDefault();
   const parsed = parseLocation(locInput.value);
   if (!parsed) {
+    clearResults();
     setStatus('看不懂這個輸入。可以貼完整的 Google Maps 網址，或直接輸入「25.11, 121.92」。', 'error');
     return;
   }
+  if (parsed.query) {
+    runSearch(parsed.query);
+    locInput.blur();
+    return;
+  }
+  clearResults();
   if (parsed.needsExpand) {
     setStatus('短網址無法在瀏覽器裡展開。', 'error');
     const a = document.createElement('a');
@@ -302,7 +370,7 @@ function restore() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORE_KEY));
     if (saved && Number.isFinite(saved.lat) && Number.isFinite(saved.lon)) {
-      applyTarget(saved, { focus: false }); // 視野交給隨後的 relayout 決定
+      applyTarget(saved);
     }
   } catch {
     // 壞掉的紀錄直接忽略
@@ -322,8 +390,10 @@ function relayout() {
     state.tx += (vw - lastVW) / 2;
     state.ty += (vh - lastVH) / 2;
     render();
-  } else {
+  } else if (state.view === 'focus') {
     focusTarget(); // 沒有地點時會退回全台視野
+  } else {
+    fitWhole();
   }
   lastVW = vw;
   lastVH = vh;

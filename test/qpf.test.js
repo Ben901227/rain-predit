@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   parseLocation, lonLatToPixel, pixelToLonLat, isInRange,
-  cacheBustToken, frameUrl,
+  cacheBustToken, frameUrl, geocodeUrl, parseGeocodeResults,
 } from '../qpf.js';
 
 const LONGDONG_URL = 'https://www.google.com/maps/place/%E6%96%B0%E5%8C%97%E5%B8%82%E9%BE%8D%E6%B4%9E/@25.110544,121.9131185,16z/data=!3m1!4b1!4m6!3m5!1s0x345d43760d30c4ab:0x955d5b7fe7bf5b6d!8m2!3d25.1100179!4d121.9202884!16s%2Fg%2F1tfsqm55';
@@ -37,9 +37,48 @@ test('短網址回報需要展開', () => {
 
 test('無法解析的輸入回傳 null', () => {
   assert.equal(parseLocation(''), null);
-  assert.equal(parseLocation('龍洞'), null);
   assert.equal(parseLocation('https://example.com/no-coords'), null);
   assert.equal(parseLocation('999, 999'), null);
+});
+
+test('自由文字當成搜尋關鍵字', () => {
+  assert.deepEqual(parseLocation('龍洞'), { query: '龍洞' });
+  assert.deepEqual(parseLocation('  日月潭 '), { query: '日月潭' });
+});
+
+test('搜尋網址限定台灣並編碼關鍵字', () => {
+  const url = new URL(geocodeUrl('龍洞'));
+  assert.equal(url.origin + url.pathname, 'https://nominatim.openstreetmap.org/search');
+  assert.equal(url.searchParams.get('q'), '龍洞');
+  assert.equal(url.searchParams.get('countrycodes'), 'tw');
+  assert.equal(url.searchParams.get('format'), 'jsonv2');
+  assert.ok(!url.href.includes('龍洞'), '關鍵字必須做過 URL 編碼');
+});
+
+// 實際向 Nominatim 查「龍洞」的回應（節錄欄位）。同名地點分佈在新北與台東，
+// 因此不能自動選第一筆，必須列出候選。
+const LONGDONG_RESULTS = [
+  { lat: '25.1109654', lon: '121.9190344', name: '龍洞', display_name: '龍洞, 新北市, 22451, 臺灣' },
+  { lat: '25.1142599', lon: '121.9126948', name: '龍洞', display_name: '龍洞, 龍洞街, 和美里, 貢寮區, 龍洞, 新北市, 22451, 臺灣' },
+  { lat: '22.9990266', lon: '121.3140565', name: '龍洞', display_name: '龍洞, 小馬龍洞灌溉水渠人行道, 信義里, 成功鎮, 臺東縣, 961, 臺灣' },
+];
+
+test('整理搜尋結果', () => {
+  const r = parseGeocodeResults(LONGDONG_RESULTS);
+  assert.equal(r.length, 3);
+  assert.deepEqual(r[0], {
+    lat: 25.1109654, lon: 121.9190344, label: '龍洞', detail: '龍洞, 新北市, 22451, 臺灣',
+  });
+  assert.equal(r[2].lat, 22.9990266);
+});
+
+test('搜尋結果缺欄位時不會壞掉', () => {
+  assert.deepEqual(parseGeocodeResults([]), []);
+  assert.deepEqual(parseGeocodeResults(null), []);
+  assert.deepEqual(parseGeocodeResults([{ lat: 'x', lon: 'y', name: 'a' }]), []);
+  assert.equal(parseGeocodeResults([
+    { lat: '24.1', lon: '121.2', display_name: '合歡山, 南投縣, 臺灣' },
+  ])[0].label, '合歡山');
 });
 
 // 期望像素取自 calibrate.py 的擬合結果，已用海岸線疊合圖目視確認。
