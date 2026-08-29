@@ -6,7 +6,9 @@ on:
   push:
     branches: [main]
   schedule:
-    - cron: '5,35 * * * *' # 每 30 分鐘；定量降水約每 6 小時發布一次
+    # 每 30 分鐘。刻意避開整點前後：GitHub 自己的文件說明 schedule 事件在
+    # 尖峰（每小時開頭）會被延遲甚至略過。
+    - cron: '17,47 * * * *'
   workflow_dispatch:
 
 permissions:
