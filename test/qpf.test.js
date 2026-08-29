@@ -1,8 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   parseLocation, lonLatToPixel, pixelToLonLat, isInRange,
   cacheBustToken, frameUrl, geocodeUrl, parseGeocodeResults,
+  rainUrl, decodeRainGrid, rainLevelAt, rainText, rainColor, RAIN_BINS,
 } from '../qpf.js';
 
 const LONGDONG_URL = 'https://www.google.com/maps/place/%E6%96%B0%E5%8C%97%E5%B8%82%E9%BE%8D%E6%B4%9E/@25.110544,121.9131185,16z/data=!3m1!4b1!4m6!3m5!1s0x345d43760d30c4ab:0x955d5b7fe7bf5b6d!8m2!3d25.1100179!4d121.9202884!16s%2Fg%2F1tfsqm55';
@@ -124,4 +126,57 @@ test('圖片網址補零', () => {
     'https://www.cwa.gov.tw/Data/fcst_img/QPF_ChFcstPrecip_6_06.png?T=X');
   assert.equal(frameUrl(12, 48, 'X'),
     'https://www.cwa.gov.tw/Data/fcst_img/QPF_ChFcstPrecip_12_48.png?T=X');
+});
+
+/* ---------- 雨量網格 ---------- */
+
+test('雨量網格網址', () => {
+  assert.equal(rainUrl(6, 6), 'rain/6_06.json');
+  assert.equal(rainUrl(12, 48), 'rain/12_48.json');
+});
+
+test('展開 RLE 網格並查詢等級', () => {
+  // 3×2 的網格，第一列全是 0，第二列是 5,5,255
+  const grid = decodeRainGrid({ x0: 10, y0: 20, w: 3, h: 2, generated: '2026-08-29T16:00:00Z',
+    rle: [0, 3, 5, 2, 255, 1] });
+  assert.equal(grid.levels.length, 6);
+  assert.equal(grid.generated, '2026-08-29T16:00:00Z');
+  assert.equal(rainLevelAt(grid, 10, 20), 0);
+  assert.equal(rainLevelAt(grid, 11, 21), 5);
+  assert.equal(rainLevelAt(grid, 12, 21), 255);
+  // 網格外
+  assert.equal(rainLevelAt(grid, 9, 20), null);
+  assert.equal(rainLevelAt(grid, 13, 20), null);
+  assert.equal(rainLevelAt(grid, 10, 22), null);
+});
+
+test('RLE 長度不符要報錯', () => {
+  assert.throws(() => decodeRainGrid({ x0: 0, y0: 0, w: 3, h: 2, rle: [0, 3] }), /長度不符/);
+});
+
+test('雨量文字與顏色', () => {
+  assert.equal(rainText(0), '未達 0.5 毫米');
+  assert.equal(rainText(1), '0.5～1 毫米');
+  assert.equal(rainText(5), '10～15 毫米');
+  assert.equal(rainText(17), '300 毫米以上');
+  assert.equal(rainText(255), '無法判讀');
+  assert.equal(rainText(null), null);
+  assert.equal(rainColor(5), '#0363ff');
+  assert.equal(rainColor(0), null);
+  assert.equal(rainColor(255), null);
+});
+
+test('色階定義與 rain_grid.py 一致', () => {
+  // 兩邊的等級編號必須對得起來，否則讀出來的雨量是錯的
+  const py = readFileSync(new URL('../rain_grid.py', import.meta.url), 'utf8');
+  const block = py.match(/^BINS = \[$([\s\S]*?)^\]$/m)[1];
+  const rows = [...block.matchAll(/\(([\d.]+), (None|[\d.]+), \((\d+), (\d+), (\d+)\)\)/g)];
+  assert.equal(rows.length, RAIN_BINS.length);
+  rows.forEach(([, min, max, r, g, b], i) => {
+    const bin = RAIN_BINS[i];
+    assert.equal(Number(min), bin.min, `第 ${i + 1} 級下界`);
+    assert.equal(max === 'None' ? null : Number(max), bin.max, `第 ${i + 1} 級上界`);
+    const hex = '#' + [r, g, b].map((v) => Number(v).toString(16).padStart(2, '0')).join('');
+    assert.equal(hex, bin.color, `第 ${i + 1} 級顏色`);
+  });
 });

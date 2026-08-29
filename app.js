@@ -2,6 +2,7 @@ import {
   IMG_W, IMG_H, FRAMES, CROP_LEGEND, CROP_TIMESTAMP, PX_PER_DEG_LON,
   lonLatToPixel, isInRange, cacheBustToken, frameUrl, parseLocation, formatCoords,
   geocodeUrl, parseGeocodeResults,
+  rainUrl, decodeRainGrid, rainLevelAt, rainText, rainColor, RAIN_UNKNOWN,
 } from './qpf.js';
 
 const STORE_KEY = 'rain-predit.location';
@@ -22,6 +23,7 @@ const locInput = $('#locInput');
 const locStatus = $('#locStatus');
 const resultList = $('#results');
 const clearInput = $('#clearInput');
+const rainBox = $('#rain');
 
 const token = cacheBustToken(new Date());
 const state = {
@@ -206,7 +208,11 @@ function buildFrames() {
     for (const hour of hours) {
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.textContent = `+${hour}`;
+      const label = document.createElement('span');
+      label.textContent = `+${hour}`;
+      const bar = document.createElement('i'); // 該時距在點位上的雨量色階
+      bar.className = 'lvl';
+      btn.append(label, bar);
       btn.dataset.kind = kind;
       btn.dataset.hour = hour;
       btn.addEventListener('click', () => setFrame(kind, hour));
@@ -227,6 +233,7 @@ function markActiveFrame() {
 function setFrame(kind, hour) {
   state.frame = { kind, hour };
   markActiveFrame();
+  updateRain();
   const url = frameUrl(kind, hour, token);
   showOverlay('載入中…');
 
@@ -263,6 +270,112 @@ function hideOverlay() {
   overlayMsg.textContent = '';
 }
 
+/* ---------- 雨量 ---------- */
+
+// CWA 的圖沒有 CORS，瀏覽器讀不到像素，所以雨量改查 GitHub Actions 預先解析好的網格。
+const grids = new Map(); // `${kind}_${hour}` -> Promise<grid>
+const STALE_MS = 2.5 * 3600 * 1000; // 排程每 30 分鐘更新一次網格
+
+function loadGrid(kind, hour) {
+  const key = `${kind}_${hour}`;
+  if (!grids.has(key)) {
+    grids.set(key, fetch(rainUrl(kind, hour))
+      .then((res) => {
+        if (!res.ok) throw new Error(res.status);
+        return res.json();
+      })
+      .then(decodeRainGrid)
+      .catch((err) => {
+        grids.delete(key); // 下次再試
+        throw err;
+      }));
+  }
+  return grids.get(key);
+}
+
+function levelAtTarget(grid) {
+  const p = lonLatToPixel(state.target.lon, state.target.lat);
+  return rainLevelAt(grid, p.x, p.y);
+}
+
+function showRain(nodes) {
+  rainBox.replaceChildren(...nodes);
+  rainBox.hidden = nodes.length === 0;
+  relayout(); // 這一行會改變 #stage 高度
+}
+
+function rainMessage(text, tone) {
+  const span = document.createElement('span');
+  span.textContent = text;
+  if (tone) span.className = tone;
+  return [span];
+}
+
+let rainSeq = 0;
+
+async function updateRain() {
+  const seq = ++rainSeq;
+  if (!state.target) return showRain([]);
+  const { kind, hour } = state.frame;
+
+  let grid;
+  try {
+    grid = await loadGrid(kind, hour);
+  } catch {
+    if (seq === rainSeq) showRain(rainMessage('雨量資料暫時無法取得。', 'error'));
+    return;
+  }
+  if (seq !== rainSeq) return;
+
+  const level = levelAtTarget(grid);
+  const text = rainText(level);
+  if (text === null) return showRain([]); // 點位不在網格範圍內
+
+  const chip = document.createElement('i');
+  chip.className = 'chip';
+  const colour = rainColor(level);
+  if (colour) chip.style.background = colour;
+  else chip.classList.add(level === RAIN_UNKNOWN ? 'unknown' : 'none');
+
+  const strong = document.createElement('strong');
+  strong.textContent = text;
+
+  const nodes = [chip, document.createTextNode(`${kind} 小時累積 `), strong];
+  const at = grid.generated ? new Date(grid.generated) : null;
+  if (at && !Number.isNaN(+at)) {
+    const note = document.createElement('small');
+    const stale = Date.now() - +at > STALE_MS;
+    const t = `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
+    note.textContent = stale ? ` · 資料 ${t} 更新，可能較舊` : ` · 資料 ${t} 更新`;
+    if (stale) note.className = 'warn';
+    nodes.push(note);
+  }
+  showRain(nodes);
+}
+
+/** 在 12 個時距按鈕上標出該點位各時段的雨量色階。 */
+function refreshFrameLevels() {
+  // 以 target 本身當識別，換點位時舊的回應就會被丟掉
+  // （不能用 rainSeq：切換時距也會遞增它，會誤殺這裡的回應）
+  const target = state.target;
+  for (const btn of framesNav.querySelectorAll('button')) {
+    const bar = btn.querySelector('.lvl');
+    bar.style.background = '';
+    bar.className = 'lvl';
+    if (!state.target) continue;
+    loadGrid(Number(btn.dataset.kind), Number(btn.dataset.hour))
+      .then((grid) => {
+        if (state.target !== target || !target) return;
+        const level = levelAtTarget(grid);
+        const colour = rainColor(level);
+        if (colour) bar.style.background = colour;
+        else if (level === 0) bar.classList.add('none');
+        bar.title = rainText(level) || '';
+      })
+      .catch(() => {});
+  }
+}
+
 /* ---------- 地點 ---------- */
 
 function setStatus(text, tone) {
@@ -283,6 +396,8 @@ function applyTarget(target) {
   setInput(target.label || coords);
   setStatus(target.label ? `${target.label} · ${coords}` : coords, '');
   fitWhole(); // 維持全台視野，放大交給雙擊或雙指
+  updateRain();
+  refreshFrameLevels();
   return true;
 }
 

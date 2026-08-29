@@ -1,0 +1,45 @@
+name: Deploy
+
+# 網頁本身是靜態檔，但雨量網格必須定期由 CWA 的預報圖重新解析，
+# 所以改用 Actions 部署：每次執行都重新產生 rain/，不進版控。
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '5,35 * * * *' # 每 30 分鐘；定量降水約每 6 小時發布一次
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 解析預報圖成雨量網格
+        run: python3 rain_grid.py _site/rain
+
+      - name: 組出網站內容
+        run: cp index.html app.js qpf.js style.css favicon.svg apple-touch-icon.png _site/
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

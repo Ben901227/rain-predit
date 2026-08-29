@@ -127,6 +127,31 @@ button:active { background: var(--panel-hi); }
 #locStatus.warn { color: #ffc861; }
 #locStatus a { color: var(--accent); }
 
+#rain {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 7px 2px 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+#rain strong { color: var(--text); font-weight: 600; }
+#rain small { font-size: 11px; }
+#rain small.warn { color: #ffc861; }
+#rain .error { color: var(--danger); }
+
+#rain .chip {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+}
+
+#rain .chip.none { background: #edf9fe; }        /* 圖面底色＝未達 0.5 毫米 */
+#rain .chip.unknown { background: var(--panel-hi); }
+
 #results {
   margin: 8px 0 0;
   padding: 0;
@@ -313,12 +338,26 @@ button:active { background: var(--panel-hi); }
 }
 
 .frame-row button {
+  position: relative;
   min-width: 0;
-  padding: 8px 2px;
+  padding: 7px 2px 13px;
   border-radius: 8px;
   font-size: 13px;
   font-variant-numeric: tabular-nums;
 }
+
+/* 該時距在點位上的雨量色階 */
+.frame-row button .lvl {
+  position: absolute;
+  left: 5px;
+  right: 5px;
+  bottom: 4px;
+  height: 4px;
+  border-radius: 2px;
+}
+
+.frame-row button .lvl.none { background: rgba(255, 255, 255, 0.16); }
+.frame-row button.active .lvl.none { background: rgba(0, 0, 0, 0.2); }
 
 .frame-row button.active {
   border-color: var(--accent);

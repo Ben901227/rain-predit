@@ -134,3 +134,70 @@ export function parseGeocodeResults(json) {
 export function formatCoords(lat, lon) {
   return `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
 }
+
+/* ---------- 雨量色階 ---------- */
+
+// 色階的 17 個區間，顏色取自圖上色條中線；rain_grid.py 用同一組定義產生網格。
+export const RAIN_BINS = [
+  { min: 0.5, max: 1, color: '#c2c2c2' },
+  { min: 1, max: 2, color: '#9cfcff' },
+  { min: 2, max: 5, color: '#03c8ff' },
+  { min: 5, max: 10, color: '#059bff' },
+  { min: 10, max: 15, color: '#0363ff' },
+  { min: 15, max: 20, color: '#059902' },
+  { min: 20, max: 30, color: '#39ff03' },
+  { min: 30, max: 40, color: '#fffb03' },
+  { min: 40, max: 50, color: '#ffc800' },
+  { min: 50, max: 70, color: '#ff9500' },
+  { min: 70, max: 90, color: '#ff0000' },
+  { min: 90, max: 110, color: '#cc0000' },
+  { min: 110, max: 130, color: '#990000' },
+  { min: 130, max: 150, color: '#960099' },
+  { min: 150, max: 200, color: '#c900cc' },
+  { min: 200, max: 300, color: '#fb00ff' },
+  { min: 300, max: null, color: '#fdc9ff' },
+];
+
+export const RAIN_NONE = 0;    // 未達 0.5 毫米
+export const RAIN_UNKNOWN = 255; // 被圖上元素遮住，判讀不出來
+
+export function rainUrl(kind, hour) {
+  // 不加 cache-bust 參數：網格每小時才更新一次，交給 ETag 重新驗證即可
+  return `rain/${kind}_${String(hour).padStart(2, '0')}.json`;
+}
+
+/** 把 rain_grid.py 產生的 RLE 展開成可直接查詢的陣列。 */
+export function decodeRainGrid(data) {
+  const { x0, y0, w, h, rle, generated } = data;
+  const levels = new Uint8Array(w * h);
+  let at = 0;
+  for (let i = 0; i < rle.length; i += 2) {
+    const end = at + rle[i + 1];
+    levels.fill(rle[i], at, end);
+    at = end;
+  }
+  if (at !== levels.length) throw new Error('雨量網格長度不符');
+  return { x0, y0, w, h, generated, levels };
+}
+
+/** 回傳該像素的雨量等級；落在網格外回傳 null。 */
+export function rainLevelAt(grid, x, y) {
+  const gx = Math.round(x) - grid.x0;
+  const gy = Math.round(y) - grid.y0;
+  if (gx < 0 || gy < 0 || gx >= grid.w || gy >= grid.h) return null;
+  return grid.levels[gy * grid.w + gx];
+}
+
+export function rainText(level) {
+  if (level === null || level === undefined) return null;
+  if (level === RAIN_UNKNOWN) return '無法判讀';
+  if (level === RAIN_NONE) return '未達 0.5 毫米';
+  const bin = RAIN_BINS[level - 1];
+  if (!bin) return null;
+  return bin.max === null ? '300 毫米以上' : `${bin.min}～${bin.max} 毫米`;
+}
+
+export function rainColor(level) {
+  const bin = RAIN_BINS[level - 1];
+  return bin ? bin.color : null;
+}
