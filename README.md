@@ -63,6 +63,21 @@ Google Maps 的**短網址**（`maps.app.goo.gl/…`）沒辦法在瀏覽器裡�
 
 定位後**不會**自動放大，維持全台視野，圖釘一定看得到。
 
+### 加入主畫面
+
+**iOS Safari**：分享 → 加入主畫面。開啟後是全螢幕、沒有網址列，
+圖示是雨滴、名稱「降水點位」（靠 `apple-mobile-web-app-capable`
+與 `apple-touch-icon` 達成）。
+
+**Android Chrome**：選單 → 安裝應用程式／加到主畫面。有 `manifest.json`，
+所以是真的安裝：獨立視窗、沒有瀏覽器介面、啟動畫面用深色底加雨滴圖示。
+
+manifest 把方向鎖成直向（`"orientation": "portrait"`），因為橫向的地圖只剩約 145px 高，
+實際上不好用。
+
+**沒有離線功能**。沒有 service worker，斷網就打不開；
+何況預報圖本來就得即時連到氣象署，快取舊圖反而危險。
+
 ---
 
 ## 運作方式
@@ -147,7 +162,8 @@ qpf.js            純函式：投影、網址、地點解析、雨量色階、�
 style.css         深色主題，手機優先
 rain_grid.py      把預報圖解析成雨量等級網格（CI 每次部署都會跑）
 calibrate.py      一次性的投影校正，輸出參數與疊合圖供目視確認
-make_icon.py      產生 apple-touch-icon.png（macOS 上沒有 Pillow 也沒有 SVG 轉檔工具）
+make_icon.py      產生 PNG 圖示 180／192／512（macOS 上沒有 Pillow 也沒有 SVG 轉檔工具）
+manifest.json     web app manifest，Android 要有它才能真的安裝
 .github/workflows/deploy.yml
 ```
 
@@ -164,8 +180,55 @@ make_icon.py      產生 apple-touch-icon.png（macOS 上沒有 Pillow 也沒有
 - **橫向手機很擠**，地圖只剩約 145px 高。建議直向使用。
 - 3 小時極短期預報只在颱風／豪雨守視期間發布，本版不做。
 
-## 資料來源
+## 資料來源與授權
 
-- 預報圖：[中央氣象署 定量降水預報](https://www.cwa.gov.tw/V8/C/P/QPF.html)
-- 地點搜尋：[Nominatim / OpenStreetMap](https://www.openstreetmap.org/copyright)（搜尋只在送出時發送，符合其使用政策）
+### 中央氣象署
+
+預報圖：[定量降水預報](https://www.cwa.gov.tw/V8/C/P/QPF.html)。
+
+氣象署的[政府網站資料開放宣告](https://www.cwa.gov.tw/V8/C/information.html)把全球資訊網上的
+資料與素材，以無償、非專屬、可再授權的方式提供公眾使用，得重製、改作、編輯、公開傳輸，
+用來開發產品或服務，授權不會事後撤回，也不需要另外取得書面同意——
+但「使用時應註明出處」。本站在頁尾標示來源並連回氣象署。
+
+有兩點是這個專案要自己注意的：
+
+1. **氣象署不建議連結到特定檔案或自動擷取**（宣告中「連結至本署網站」一節）。
+   本站兩件事都做了：直接引用 `Data/fcst_img/` 的圖檔，並且排程自動下載解析。
+   官方建議的正規管道是[氣象資料開放平臺](https://opendata.cwa.gov.tw/)的 API（需註冊金鑰）。
+   實務風險是氣象署改了檔名或路徑，本站就會壞掉，這個責任在我們。
+2. **不得惡意變更資料**。宣告要求呈現的資訊不能與原始素材不符。
+   所以本站顯示的是未經修改的原圖，數值只講區間、判讀不出來就標「無法判讀」，
+   並且標出雨量資料的更新時間——因為新舊版交替時數值可能還對應上一版。
+
+氣象署對資料的即時性與正確性不負保證責任，使用者應自行注意取用最新資料、避免不當解讀。
+本站不是官方服務。
+
+### 其他
+
+- 地點搜尋：[Nominatim / OpenStreetMap](https://www.openstreetmap.org/copyright)
+  （只在送出時發送請求，符合其使用政策）
 - 校正用的縣市界：[g0v/twgeojson](https://github.com/g0v/twgeojson)
+
+---
+
+## 授權
+
+**程式碼採 [MIT](LICENSE)。資料不是。** 這兩者必須分開看：
+
+| 對象 | 授權 |
+|---|---|
+| 本專案的程式碼（`*.js`、`*.py`、`*.css`、`*.html`） | MIT，見 [LICENSE](LICENSE) |
+| 預報圖與由它產生的雨量網格（`rain/*.json`） | 著作權屬**交通部中央氣象署**，依其[政府網站資料開放宣告](https://www.cwa.gov.tw/V8/C/information.html)使用，條件是註明出處 |
+| 投影參數（`qpf.js` 的 `PROJ`） | 量測得到的數值，屬事實而非著作 |
+| 頁尾的 GitHub 圖示 | GitHub 的商標。MIT 本身就不涵蓋商標 |
+
+也就是說：拿這份程式碼去改、去賣都可以；但**雨量網格是氣象署資料的衍生物，不在 MIT 的授權範圍內**，
+要用它就得遵守氣象署的宣告，最重要的是註明出處。
+
+校正用的 [g0v/twgeojson](https://github.com/g0v/twgeojson) 沒有標示授權，
+但本專案沒有把它納入版控（`data/` 在 `.gitignore` 裡，`calibrate.py` 只寫了下載方式），
+不構成散布。
+
+本站不是氣象署的官方服務。預報資料的正確性與即時性由氣象署負責，
+本專案對判讀結果不提供任何擔保——見 LICENSE 的免責條款。
