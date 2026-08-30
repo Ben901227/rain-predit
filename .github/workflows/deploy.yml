@@ -30,7 +30,9 @@ jobs:
         run: python3 rain_grid.py _site/rain
 
       - name: 組出網站內容
-        run: cp index.html app.js qpf.js style.css favicon.svg apple-touch-icon.png _site/
+        run: |
+          cp index.html app.js qpf.js style.css manifest.json _site/
+          cp favicon.svg apple-touch-icon.png icon-192.png icon-512.png _site/
 
       - uses: actions/upload-pages-artifact@v3
         with:

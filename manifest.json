@@ -1,0 +1,16 @@
+{
+  "name": "定量降水預報 · 指定地點",
+  "short_name": "降水點位",
+  "description": "在中央氣象署的定量降水預報圖上標出指定地點，並讀出該點位的累積雨量。",
+  "lang": "zh-Hant",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0d1319",
+  "theme_color": "#0d1319",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

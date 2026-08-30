@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""產生 apple-touch-icon.png（180×180），圖案與 favicon.svg 一致：雨滴＋中心點。
+"""產生 PNG 圖示，圖案與 favicon.svg 一致：雨滴＋中心點。
+
+    apple-touch-icon.png  180  iOS 加入主畫面
+    icon-192.png          192  web app manifest
+    icon-512.png          512  web app manifest（Android 安裝與啟動畫面）
 
 macOS 上沒有 Pillow 也沒有 SVG 轉檔工具，所以用 stdlib 自己畫。
 形狀＝圓形與「由頂點拉出的切線錐」的聯集，3×3 超取樣做去鋸齒。
@@ -11,7 +15,6 @@ import math
 import struct
 import zlib
 
-SIZE = 180
 SS = 3  # 超取樣倍率
 
 BG_TOP = (0x16, 0x21, 0x2C)
@@ -19,10 +22,14 @@ BG_BOTTOM = (0x0D, 0x13, 0x19)
 DROP_TOP = (0x6F, 0xC0, 0xFF)
 DROP_BOTTOM = (0x2B, 0x7F, 0xD4)
 
+# 幾何以 180 為基準，其他尺寸等比例縮放
+BASE = 180.0
 APEX_Y = 26.0
 CX, CY, R = 90.0, 116.0, 44.0
 DOT_R = 14.0
 HALO_R = 21.0
+
+OUTPUTS = [("apple-touch-icon.png", 180), ("icon-192.png", 192), ("icon-512.png", 512)]
 
 # 頂點到圓心的距離與切線半角
 _D = CY - APEX_Y
@@ -49,8 +56,8 @@ def blend(base, over, alpha):
 
 
 def sample(x, y):
-    """回傳單一取樣點的顏色。"""
-    colour = lerp(BG_TOP, BG_BOTTOM, y / SIZE)
+    """回傳單一取樣點的顏色（座標為 180 基準）。"""
+    colour = lerp(BG_TOP, BG_BOTTOM, y / BASE)
     if in_drop(x, y):
         t = min(1.0, max(0.0, (y - APEX_Y) / (CY + R - APEX_Y)))
         colour = lerp(DROP_TOP, DROP_BOTTOM, t)
@@ -62,18 +69,19 @@ def sample(x, y):
     return colour
 
 
-def render():
+def render(size):
     rows = []
-    step = 1.0 / SS
+    unit = BASE / size          # 一個輸出像素等於幾個基準單位
+    step = unit / SS
     offset = step / 2
-    for py in range(SIZE):
+    for py in range(size):
         row = bytearray()
-        for px in range(SIZE):
+        for px in range(size):
             r = g = b = 0
             for sy in range(SS):
-                y = py + offset + sy * step
+                y = py * unit + offset + sy * step
                 for sx in range(SS):
-                    c = sample(px + offset + sx * step, y)
+                    c = sample(px * unit + offset + sx * step, y)
                     r += c[0]
                     g += c[1]
                     b += c[2]
@@ -83,7 +91,7 @@ def render():
     return rows
 
 
-def write_png(path, rows):
+def write_png(path, size, rows):
     raw = b''.join(b'\x00' + bytes(row) for row in rows)  # filter type 0
 
     def chunk(tag, data):
@@ -91,7 +99,7 @@ def write_png(path, rows):
         return struct.pack('>I', len(data)) + body + struct.pack('>I', zlib.crc32(body))
 
     png = (b'\x89PNG\r\n\x1a\n'
-           + chunk(b'IHDR', struct.pack('>IIBBBBB', SIZE, SIZE, 8, 2, 0, 0, 0))
+           + chunk(b'IHDR', struct.pack('>IIBBBBB', size, size, 8, 2, 0, 0, 0))
            + chunk(b'IDAT', zlib.compress(raw, 9))
            + chunk(b'IEND', b''))
     with open(path, 'wb') as f:
@@ -99,5 +107,6 @@ def write_png(path, rows):
 
 
 if __name__ == '__main__':
-    write_png('apple-touch-icon.png', render())
-    print('wrote apple-touch-icon.png')
+    for name, size in OUTPUTS:
+        write_png(name, size, render(size))
+        print(f'wrote {name} ({size}×{size})')
