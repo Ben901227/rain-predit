@@ -201,3 +201,37 @@ export function rainColor(level) {
   const bin = RAIN_BINS[level - 1];
   return bin ? bin.color : null;
 }
+
+/* ---------- 最愛地點 ---------- */
+
+export const MAX_FAVOURITES = 5;
+
+// 同一個地方用搜尋和貼 Google Maps 網址取得的座標會差上幾十公尺，
+// 不留容差就會存進兩筆看起來一模一樣的最愛。0.0005 度約 55 公尺。
+const SAME_SPOT_DEG = 0.0005;
+
+export function sameSpot(a, b) {
+  return Math.abs(a.lat - b.lat) < SAME_SPOT_DEG &&
+    Math.abs(a.lon - b.lon) < SAME_SPOT_DEG;
+}
+
+export function isFavourite(list, target) {
+  return list.some((fav) => sameSpot(fav, target));
+}
+
+/** 回傳新的清單：已收藏就移除，否則附加到尾端並把超出的最舊幾筆砍掉。 */
+export function toggleFavourite(list, target) {
+  if (isFavourite(list, target)) {
+    return list.filter((fav) => !sameSpot(fav, target));
+  }
+  return [...list, target].slice(-MAX_FAVOURITES);
+}
+
+/** 還原 localStorage 內容時的防禦：丟掉壞掉的項目，最多留 MAX_FAVOURITES 筆。 */
+export function parseFavourites(json) {
+  if (!Array.isArray(json)) return [];
+  return json
+    .filter((item) => item && Number.isFinite(item.lat) && Number.isFinite(item.lon))
+    .map(({ lat, lon, label }) => ({ lat, lon, label: label || null }))
+    .slice(-MAX_FAVOURITES);
+}

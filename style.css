@@ -115,6 +115,58 @@ button:active { background: var(--panel-hi); }
   font-weight: 600;
 }
 
+#favs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.fav-scroll {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.fav-scroll::-webkit-scrollbar { display: none; }
+
+/* 右緣淡出，提示還可以往右捲；沒有溢出時淡出區是空的，看不出來 */
+.fav-scroll {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 16px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 16px), transparent);
+}
+
+#favs .fav {
+  flex: 0 0 auto;
+  max-width: 11em;
+  padding: 6px 11px;
+  border-radius: 999px;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#favs .fav.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+#favToggle {
+  flex: 0 0 auto;
+  width: 34px;
+  padding: 6px 0;
+  border-radius: 999px;
+  font-size: 15px;
+  line-height: 1;
+  text-align: center;
+}
+
+#favToggle.on { border-color: #ffc861; color: #ffc861; }
+
 #locStatus {
   margin: 8px 2px 0;
   min-height: 1.25em;
@@ -377,8 +429,22 @@ footer {
   color: var(--muted);
 }
 
-footer button { padding: 7px 13px; font-size: 12px; }
-footer span { text-align: right; }
+/* 三個項目擠在 375px 寬時，只有中間的來源文字可以換行 */
+footer button {
+  flex: 0 0 auto;
+  padding: 7px 13px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.repo {
+  flex: 0 0 auto;
+  display: flex;
+  color: var(--muted);
+}
+
+.repo:hover { color: var(--text); }
+footer span { flex: 1 1 auto; min-width: 0; text-align: right; }
 footer a { color: var(--muted); }
 
 [hidden] { display: none !important; }

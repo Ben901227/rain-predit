@@ -3,9 +3,11 @@ import {
   lonLatToPixel, isInRange, cacheBustToken, frameUrl, parseLocation, formatCoords,
   geocodeUrl, parseGeocodeResults,
   rainUrl, decodeRainGrid, rainLevelAt, rainText, rainColor, RAIN_UNKNOWN,
+  sameSpot, isFavourite, toggleFavourite, parseFavourites, MAX_FAVOURITES,
 } from './qpf.js';
 
 const STORE_KEY = 'rain-predit.location';
+const FAV_KEY = 'rain-predit.favorites';
 const MAX_SCALE = 8;
 const FOCUS_SPAN_DEG = 0.35; // 放大到點位時視野涵蓋的經度跨度
 
@@ -24,6 +26,7 @@ const locStatus = $('#locStatus');
 const resultList = $('#results');
 const clearInput = $('#clearInput');
 const rainBox = $('#rain');
+const favsBox = $('#favs');
 
 const token = cacheBustToken(new Date());
 const state = {
@@ -398,6 +401,7 @@ function applyTarget(target) {
   fitWhole(); // 維持全台視野，放大交給雙擊或雙指
   updateRain();
   refreshFrameLevels();
+  renderFavs(); // ★ 與 .active 要反映新的目前地點
   return true;
 }
 
@@ -501,19 +505,86 @@ clearInput.addEventListener('click', () => {
   locInput.focus();
 });
 
+/* ---------- 最愛地點 ---------- */
+
+let favourites = [];
+
+function favLabel(fav) {
+  return fav.label || formatCoords(fav.lat, fav.lon);
+}
+
+function saveFavourites() {
+  localStorage.setItem(FAV_KEY, JSON.stringify(favourites));
+}
+
+function renderFavs() {
+  const saved = state.target && isFavourite(favourites, state.target);
+
+  // 地點多或名稱長的時候這一排會超出寬度，所以只讓地點捲動，
+  // ★ 留在捲動區外面，否則要先橫向捲到底才點得到。
+  const scroller = document.createElement('div');
+  scroller.className = 'fav-scroll';
+  scroller.append(...favourites.map((fav) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'fav';
+    btn.textContent = favLabel(fav);
+    if (state.target && sameSpot(fav, state.target)) btn.classList.add('active');
+    btn.addEventListener('click', () => applyTarget({ ...fav }));
+    return btn;
+  }));
+
+  const nodes = [scroller];
+  if (state.target) {
+    const star = document.createElement('button');
+    star.type = 'button';
+    star.id = 'favToggle';
+    star.textContent = saved ? '★' : '☆';
+    star.title = saved ? '從最愛移除' : '加入最愛';
+    star.setAttribute('aria-label', star.title);
+    star.classList.toggle('on', saved);
+    star.addEventListener('click', toggleCurrentFavourite);
+    nodes.push(star);
+  }
+
+  favsBox.replaceChildren(...nodes);
+  favsBox.hidden = !favourites.length && !state.target;
+  relayout(); // 這一列會改變 #stage 高度
+}
+
+function toggleCurrentFavourite() {
+  if (!state.target) return;
+  const was = isFavourite(favourites, state.target);
+  const dropped = was ? null : favourites.length === MAX_FAVOURITES ? favourites[0] : null;
+  favourites = toggleFavourite(favourites, {
+    lat: state.target.lat, lon: state.target.lon, label: state.target.label || null,
+  });
+  saveFavourites();
+  // 自動汰換不該無聲無息
+  if (dropped) setStatus(`已加入最愛，並移除最舊的「${favLabel(dropped)}」。`, 'warn');
+  renderFavs();
+}
+
 $('#resetView').addEventListener('click', fitWhole);
 
 /* ---------- 啟動 ---------- */
 
 function restore() {
   try {
+    favourites = parseFavourites(JSON.parse(localStorage.getItem(FAV_KEY)));
+  } catch {
+    favourites = []; // 壞掉的紀錄直接忽略
+  }
+  try {
     const saved = JSON.parse(localStorage.getItem(STORE_KEY));
     if (saved && Number.isFinite(saved.lat) && Number.isFinite(saved.lon)) {
-      applyTarget(saved);
+      applyTarget(saved); // 內含 renderFavs()
+      return;
     }
   } catch {
     // 壞掉的紀錄直接忽略
   }
+  renderFavs(); // 沒有目前地點時仍要畫出已存的最愛
 }
 
 /**

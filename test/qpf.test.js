@@ -5,6 +5,7 @@ import {
   parseLocation, lonLatToPixel, pixelToLonLat, isInRange,
   cacheBustToken, frameUrl, geocodeUrl, parseGeocodeResults,
   rainUrl, decodeRainGrid, rainLevelAt, rainText, rainColor, RAIN_BINS,
+  sameSpot, isFavourite, toggleFavourite, parseFavourites, MAX_FAVOURITES,
 } from '../qpf.js';
 
 const LONGDONG_URL = 'https://www.google.com/maps/place/%E6%96%B0%E5%8C%97%E5%B8%82%E9%BE%8D%E6%B4%9E/@25.110544,121.9131185,16z/data=!3m1!4b1!4m6!3m5!1s0x345d43760d30c4ab:0x955d5b7fe7bf5b6d!8m2!3d25.1100179!4d121.9202884!16s%2Fg%2F1tfsqm55';
@@ -179,4 +180,58 @@ test('色階定義與 rain_grid.py 一致', () => {
     const hex = '#' + [r, g, b].map((v) => Number(v).toString(16).padStart(2, '0')).join('');
     assert.equal(hex, bin.color, `第 ${i + 1} 級顏色`);
   });
+});
+
+/* ---------- 最愛地點 ---------- */
+
+const LONGDONG = { lat: 25.1109654, lon: 121.9190344, label: '龍洞' };
+const SUNMOON = { lat: 23.8523, lon: 120.9286, label: '日月潭' };
+
+test('同一地點的座標微差視為相同', () => {
+  // 搜尋與 Google Maps 網址取得的座標會差幾十公尺
+  assert.equal(sameSpot(LONGDONG, { lat: 25.1110179, lon: 121.9192884 }), true);
+  assert.equal(sameSpot(LONGDONG, SUNMOON), false);
+  // 約 110 公尺，超出容差
+  assert.equal(sameSpot(LONGDONG, { lat: 25.1119654, lon: 121.9190344 }), false);
+});
+
+test('加入與移除最愛', () => {
+  const one = toggleFavourite([], LONGDONG);
+  assert.deepEqual(one, [LONGDONG]);
+  assert.equal(isFavourite(one, LONGDONG), true);
+  assert.equal(isFavourite(one, SUNMOON), false);
+  assert.deepEqual(toggleFavourite(one, LONGDONG), []);
+});
+
+test('重複加入同一點不會變成兩筆', () => {
+  const list = toggleFavourite([], LONGDONG);
+  // 座標微差仍視為同一點，因此是「移除」而不是新增
+  assert.deepEqual(toggleFavourite(list, { lat: 25.1110179, lon: 121.9192884 }), []);
+});
+
+test('存滿 5 個再加會砍掉最舊的', () => {
+  let list = [];
+  for (let i = 0; i < MAX_FAVOURITES; i += 1) {
+    list = toggleFavourite(list, { lat: 24 + i * 0.1, lon: 121, label: `第${i}` });
+  }
+  assert.equal(list.length, MAX_FAVOURITES);
+  assert.equal(list[0].label, '第0');
+
+  const after = toggleFavourite(list, SUNMOON);
+  assert.equal(after.length, MAX_FAVOURITES);
+  assert.equal(after[0].label, '第1');                    // 最舊的被擠掉
+  assert.equal(after[MAX_FAVOURITES - 1].label, '日月潭'); // 新的在尾端
+});
+
+test('還原時丟掉壞掉的紀錄', () => {
+  assert.deepEqual(parseFavourites(null), []);
+  assert.deepEqual(parseFavourites('龍洞'), []);
+  assert.deepEqual(parseFavourites([{ lat: 'x', lon: 1 }, null, { lon: 121 }]), []);
+  assert.deepEqual(parseFavourites([{ lat: 25.11, lon: 121.92 }]),
+    [{ lat: 25.11, lon: 121.92, label: null }]);
+  // 超過上限只留最新的幾筆
+  const many = Array.from({ length: 8 }, (_, i) => ({ lat: 24 + i, lon: 121, label: `${i}` }));
+  const kept = parseFavourites(many);
+  assert.equal(kept.length, MAX_FAVOURITES);
+  assert.equal(kept[0].label, '3');
 });
