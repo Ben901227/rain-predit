@@ -556,12 +556,18 @@ function toggleCurrentFavourite() {
   if (!state.target) return;
   const was = isFavourite(favourites, state.target);
   const dropped = was ? null : favourites.length === MAX_FAVOURITES ? favourites[0] : null;
+  const first = !was && favourites.length === 0;
   favourites = toggleFavourite(favourites, {
     lat: state.target.lat, lon: state.target.lon, label: state.target.label || null,
   });
   saveFavourites();
-  // 自動汰換不該無聲無息
-  if (dropped) setStatus(`已加入最愛，並移除最舊的「${favLabel(dropped)}」。`, 'warn');
+  if (dropped) {
+    // 自動汰換不該無聲無息
+    setStatus(`已加入最愛，並移除最舊的「${favLabel(dropped)}」。`, 'warn');
+  } else if (first) {
+    // 只在第一次收藏時講一次，之後不再囉嗦
+    setStatus('已加入最愛。最愛只存在這台裝置的瀏覽器，換裝置不會同步。', 'warn');
+  }
   renderFavs();
 }
 
