@@ -26,6 +26,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # 排在最前面：測試沒過就不該浪費時間去抓 12 張圖，也不該部署。
+      # 這個 step 失敗 → build 失敗 → deploy（needs: build）不會執行。
+      - name: 跑測試
+        run: node --test test/*.test.js
+
       - name: 解析預報圖成雨量網格
         run: python3 rain_grid.py _site/rain
 
