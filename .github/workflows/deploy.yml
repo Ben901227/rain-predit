@@ -2,13 +2,15 @@ name: Deploy
 
 # 網頁本身是靜態檔，但雨量網格必須定期由 CWA 的預報圖重新解析，
 # 所以改用 Actions 部署：每次執行都重新產生 rain/，不進版控。
+#
+# 刻意「沒有」schedule 觸發：GitHub 會在公開 repo 閒置 60 天後自動停用
+# 帶有 schedule 的 workflow，而停用後連 workflow_dispatch 都會被拒
+# （實測回 HTTP 422），等於整條資料管線靜默停擺。
+# 定時的部分交給外部的 Google Apps Script，它每 30 分鐘檢查 CWA 的
+# Last-Modified，真的換版才呼叫 workflow_dispatch。
 on:
   push:
     branches: [main]
-  schedule:
-    # 每 30 分鐘。刻意避開整點前後：GitHub 自己的文件說明 schedule 事件在
-    # 尖峰（每小時開頭）會被延遲甚至略過。
-    - cron: '17,47 * * * *'
   workflow_dispatch:
 
 permissions:

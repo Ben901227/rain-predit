@@ -277,7 +277,12 @@ function hideOverlay() {
 
 // CWA 的圖沒有 CORS，瀏覽器讀不到像素，所以雨量改查 GitHub Actions 預先解析好的網格。
 const grids = new Map(); // `${kind}_${hour}` -> Promise<grid>
-const STALE_MS = 2.5 * 3600 * 1000; // 排程每 30 分鐘更新一次網格
+// 這個門檻是用來發現「管線壞掉」，不是「資料有點舊」。
+// 網格只在 CWA 換版時才重新產生，所以它的年齡天生等於 CWA 的發布間隔：
+// 實測 2026-10 是每 3 小時（8 月還是 6 小時，CWA 自己會變），加上排程最多
+// 30 分鐘的偵測延遲，正常情況可以到 3.5～4 小時。設 5 小時留一點餘裕。
+// CWA 若再次改變發布頻率，這個值要跟著調。
+const STALE_MS = 5 * 3600 * 1000;
 
 function loadGrid(kind, hour) {
   const key = `${kind}_${hour}`;
