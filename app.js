@@ -93,7 +93,8 @@ function render() {
   // 視窗尺寸會變（旋轉、鍵盤、首次載入時尚未版面配置），縮放倍率跟著重新夾一次
   state.scale = clamp(state.scale, minScale(), MAX_SCALE);
   clampPan();
-  mapImg.style.transform = `translate(${state.tx}px, ${state.ty}px) scale(${state.scale})`;
+  mapImg.style.transform =
+    `translate(${state.tx + swipeDX}px, ${state.ty}px) scale(${state.scale})`;
   renderPin();
 }
 
@@ -103,7 +104,7 @@ function renderPin() {
     return;
   }
   const p = lonLatToPixel(state.target.lon, state.target.lat);
-  const sx = state.tx + p.x * state.scale;
+  const sx = state.tx + swipeDX + p.x * state.scale;
   const sy = state.ty + p.y * state.scale;
   pin.hidden = false;
   pin.style.transform = `translate(${sx}px, ${sy}px)`;
@@ -144,6 +145,12 @@ const pointers = new Map();
 let pinchPrev = null;
 let lastTap = 0;
 let swipeFrom = null; // 單指按下的起點，用來分辨「滑動切時段」與「拖曳平移」
+let swipeDX = 0;      // 滑動過程中讓地圖跟著手指讓開一點，否則放開前毫無回饋
+
+// 跟手但有阻尼：時段之間不是真的水平捲動，1:1 跟著跑會很怪，
+// 這裡只讓它「讓開」一小段，讀起來像橡皮筋。
+const SWIPE_DAMP = 0.35;
+const SWIPE_MAX_OFFSET = 70;
 
 // 整張圖都塞得進視窗時，拖曳不會有任何視覺效果（clampPan 會把它置中），
 // 這時水平滑動拿來切換時段才不會跟平移打架。
@@ -155,6 +162,18 @@ function mapFitsViewport() {
 const SWIPE_MIN_PX = 48;   // 要夠長才算滑動，避免把點擊的手震誤判
 const SWIPE_RATIO = 1.5;   // 水平位移要明顯多於垂直，才不會把縱向捲動誤判
 const SWIPE_MAX_MS = 700;
+
+/** 放開手指後把讓開的位移收回去，用過場而不是瞬間跳回。 */
+function settleSwipe() {
+  swipeDX = 0;
+  mapImg.classList.add('settling');
+  pin.classList.add('settling');
+  render();
+  setTimeout(() => {
+    mapImg.classList.remove('settling');
+    pin.classList.remove('settling');
+  }, 200);
+}
 
 /** 在同一排（6 或 12 小時）裡往前後移動一格，到頭就停住。 */
 function shiftFrame(delta) {
@@ -182,9 +201,16 @@ viewport.addEventListener('pointermove', (e) => {
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
   if (pointers.size === 1) {
-    // 圖整張塞得下時拖曳沒有效果，別因此把視野標記成「使用者調整過」，
-    // 否則之後的 relayout 不會重新套用預設視野
-    if (!mapFitsViewport()) userAdjusted = true;
+    if (mapFitsViewport()) {
+      // 塞得下時平移沒有效果，這段手勢是用來切時段的：讓地圖跟著讓開一點當回饋
+      if (swipeFrom) {
+        swipeDX = clamp((e.clientX - swipeFrom.x) * SWIPE_DAMP,
+          -SWIPE_MAX_OFFSET, SWIPE_MAX_OFFSET);
+        render();
+      }
+      return;
+    }
+    userAdjusted = true;
     state.tx += e.clientX - prev.x;
     state.ty += e.clientY - prev.y;
     render();
@@ -205,6 +231,7 @@ viewport.addEventListener('pointermove', (e) => {
 function endPointer(e) {
   pointers.delete(e.pointerId);
   pinchPrev = null;
+  if (e.type !== 'pointerup' && swipeDX !== 0) settleSwipe();
   if (pointers.size === 0 && e.type === 'pointerup') {
     const now = Date.now();
 
@@ -212,8 +239,10 @@ function endPointer(e) {
     if (swipeFrom && mapFitsViewport()) {
       const dx = e.clientX - swipeFrom.x;
       const dy = e.clientY - swipeFrom.y;
-      if (Math.abs(dx) >= SWIPE_MIN_PX && Math.abs(dx) > Math.abs(dy) * SWIPE_RATIO &&
-          now - swipeFrom.t <= SWIPE_MAX_MS) {
+      const committed = Math.abs(dx) >= SWIPE_MIN_PX &&
+        Math.abs(dx) > Math.abs(dy) * SWIPE_RATIO && now - swipeFrom.t <= SWIPE_MAX_MS;
+      if (swipeDX !== 0) settleSwipe();
+      if (committed) {
         swipeFrom = null;
         lastTap = 0; // 滑動不該被接著算成雙擊
         shiftFrame(dx < 0 ? 1 : -1); // 往左滑看之後的時段
@@ -300,15 +329,24 @@ function markActiveFrame() {
   }
 }
 
+const SWIPE_HINT = '在地圖上左右滑動可以切換時段';
+const HINT_KEY = 'rain-predit.hint.swipe';
+let overlayTimer = null;
+let firstFrameShown = false;
+
 function setFrame(kind, hour) {
   state.frame = { kind, hour };
   markActiveFrame();
   updateRain();
   const url = frameUrl(kind, hour, token);
-  showOverlay('載入中…');
+
+  // 圖在快取裡時幾乎瞬間就好，立刻蓋上「載入中」只會閃一下，反而顯得卡。
+  clearTimeout(overlayTimer);
+  overlayTimer = setTimeout(() => showOverlay('載入中…'), 160);
 
   const pre = new Image();
   pre.onload = () => {
+    clearTimeout(overlayTimer);
     for (const img of [mapImg, legendBox.querySelector('img'), timestampBox.querySelector('img')]) {
       img.src = url;
     }
@@ -316,11 +354,47 @@ function setFrame(kind, hour) {
     legendPane.hidden = false;
     hideOverlay();
     relayout(); // 時間列與色階首次出現會壓縮 #stage
+    prefetchNeighbours(kind, hour);
+    if (!firstFrameShown) {
+      firstFrameShown = true;
+      maybeHintSwipe();
+    }
   };
   pre.onerror = () => {
-    showOverlay(`+${hour} 小時的 ${kind} 小時累積圖目前無法取得`, () => setFrame(kind, hour));
+    clearTimeout(overlayTimer);
+    showOverlay(`${frameLabel(state.base, kind, hour, Date.now())} 的 ${kind} 小時累積圖目前無法取得`,
+      () => setFrame(kind, hour));
   };
   pre.src = url;
+}
+
+// 連續滑動時每一步都在等圖下載會很頓，先把左右相鄰的時段抓進快取。
+const prefetched = new Set();
+
+function prefetchNeighbours(kind, hour) {
+  const row = FRAMES.find((f) => f.kind === kind);
+  const i = row.hours.indexOf(hour);
+  for (const j of [i + 1, i - 1]) {
+    if (j < 0 || j >= row.hours.length) continue;
+    const url = frameUrl(kind, row.hours[j], token);
+    if (prefetched.has(url)) continue;
+    prefetched.add(url);
+    new Image().src = url;
+  }
+}
+
+/** 滑動沒有任何外觀提示，第一次進來時講一次就好。 */
+function maybeHintSwipe() {
+  try {
+    if (localStorage.getItem(HINT_KEY)) return;
+    localStorage.setItem(HINT_KEY, '1');
+  } catch {
+    return; // 無痕視窗之類存不了，就不提示，也不要每次都跳
+  }
+  showOverlay(SWIPE_HINT);
+  setTimeout(() => {
+    if (overlayMsg.textContent === SWIPE_HINT) hideOverlay();
+  }, 4500);
 }
 
 function showOverlay(text, onRetry) {
