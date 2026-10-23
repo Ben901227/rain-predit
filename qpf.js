@@ -168,7 +168,7 @@ export function rainUrl(kind, hour) {
 
 /** 把 rain_grid.py 產生的 RLE 展開成可直接查詢的陣列。 */
 export function decodeRainGrid(data) {
-  const { x0, y0, w, h, rle, generated } = data;
+  const { x0, y0, w, h, rle, generated, issued } = data;
   const levels = new Uint8Array(w * h);
   let at = 0;
   for (let i = 0; i < rle.length; i += 2) {
@@ -177,7 +177,7 @@ export function decodeRainGrid(data) {
     at = end;
   }
   if (at !== levels.length) throw new Error('雨量網格長度不符');
-  return { x0, y0, w, h, generated, levels };
+  return { x0, y0, w, h, generated, issued, levels };
 }
 
 /** 回傳該像素的雨量等級；落在網格外回傳 null。 */
@@ -234,4 +234,69 @@ export function parseFavourites(json) {
     .filter((item) => item && Number.isFinite(item.lat) && Number.isFinite(item.lon))
     .map(({ lat, lon, label }) => ({ lat, lon, label: label || null }))
     .slice(-MAX_FAVOURITES);
+}
+
+/* ---------- 預報時段的實際時間 ---------- */
+
+// 預報時段的分界固定在臺灣時間的 02/08/14/20 點，與瀏覽器所在時區無關，
+// 所以一律用 UTC+8 的牆上時間計算（臺灣全年沒有日光節約時間）。
+const TW_OFFSET_MS = 8 * 3600 * 1000;
+const HOUR_MS = 3600 * 1000;
+
+/** 把絕對時間換成臺灣時間的年月日時分。 */
+function twParts(ms) {
+  const d = new Date(ms + TW_OFFSET_MS);
+  return {
+    year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, day: d.getUTCDate(),
+    hour: d.getUTCHours(), minute: d.getUTCMinutes(),
+  };
+}
+
+/** 臺灣時間當天 00:00 的絕對時間，用來比較「差幾天」。 */
+function twDayStart(ms) {
+  return Math.floor((ms + TW_OFFSET_MS) / 86400000) * 86400000 - TW_OFFSET_MS;
+}
+
+/**
+ * 由發布時間推出預報的基準時刻＝發布之後的下一個 02/08/14/20 界線。
+ *
+ * CWA 沒有把有效時間放進任何可讀的欄位，只畫在圖片上，所以只能推。
+ * 實測三組（2026-08-29 22:57→02:00、08-30 11:36→14:00、10-23 17:41→20:00）
+ * 都吻合：檔案一律在基準前約 2.5 小時上架，所以「向後取整」有兩小時以上的餘裕。
+ */
+export function forecastBase(issuedMs) {
+  if (!Number.isFinite(issuedMs)) return null;
+  const twHours = (issuedMs + TW_OFFSET_MS) / HOUR_MS;
+  let h = Math.ceil(twHours);
+  while (((h % 6) + 6) % 6 !== 2) h += 1; // 02/08/14/20 的小時數 mod 6 都是 2
+  return h * HOUR_MS - TW_OFFSET_MS;
+}
+
+/** 某個時距涵蓋的區間：結束於 base + hour，往前推 kind 小時。 */
+export function frameWindow(baseMs, kind, hour) {
+  return { start: baseMs + (hour - kind) * HOUR_MS, end: baseMs + hour * HOUR_MS };
+}
+
+const DAY_WORDS = { '-1': '昨', 0: '今', 1: '明', 2: '後' };
+
+/** 按鈕上的短標示，例如「明14」＝明天 14 點開始的那一段。 */
+export function frameLabel(baseMs, kind, hour, nowMs) {
+  if (baseMs === null) return `+${hour}`;
+  const { start } = frameWindow(baseMs, kind, hour);
+  const days = Math.round((twDayStart(start) - twDayStart(nowMs)) / 86400000);
+  const p = twParts(start);
+  const prefix = DAY_WORDS[days] ?? `${p.day}日`;
+  return `${prefix}${String(p.hour).padStart(2, '0')}`;
+}
+
+/** 完整區間文字，給 title 與輔助技術用。 */
+export function frameRangeText(baseMs, kind, hour) {
+  if (baseMs === null) return `${kind} 小時累積，+${hour} 小時`;
+  const { start, end } = frameWindow(baseMs, kind, hour);
+  const a = twParts(start);
+  const b = twParts(end);
+  const hhmm = (p) => `${String(p.hour).padStart(2, '0')}:00`;
+  const sameDay = a.year === b.year && a.month === b.month && a.day === b.day;
+  const tail = sameDay ? hhmm(b) : `${b.month}/${b.day} ${hhmm(b)}`;
+  return `${a.month}/${a.day} ${hhmm(a)} ～ ${tail}`;
 }

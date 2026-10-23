@@ -6,6 +6,7 @@ import {
   cacheBustToken, frameUrl, geocodeUrl, parseGeocodeResults,
   rainUrl, decodeRainGrid, rainLevelAt, rainText, rainColor, RAIN_BINS,
   sameSpot, isFavourite, toggleFavourite, parseFavourites, MAX_FAVOURITES,
+  forecastBase, frameWindow, frameLabel, frameRangeText,
 } from '../qpf.js';
 
 const LONGDONG_URL = 'https://www.google.com/maps/place/%E6%96%B0%E5%8C%97%E5%B8%82%E9%BE%8D%E6%B4%9E/@25.110544,121.9131185,16z/data=!3m1!4b1!4m6!3m5!1s0x345d43760d30c4ab:0x955d5b7fe7bf5b6d!8m2!3d25.1100179!4d121.9202884!16s%2Fg%2F1tfsqm55';
@@ -234,4 +235,64 @@ test('還原時丟掉壞掉的紀錄', () => {
   const kept = parseFavourites(many);
   assert.equal(kept.length, MAX_FAVOURITES);
   assert.equal(kept[0].label, '3');
+});
+
+/* ---------- 預報時段的實際時間 ---------- */
+
+// 以下三組基準都是拿網頁上的「有效時間」對照出來的，不是推論：
+//   issued 2026-08-29 22:57 CST → 有效 08/30 02:00～08:00（+6）
+//   issued 2026-08-30 11:36 CST → 有效 08/30 14:00～20:00（+6）
+//   issued 2026-10-23 17:41 CST → 有效 10/23 20:00～10/24 02:00（+6）
+const BASES = [
+  ['Sat, 29 Aug 2026 14:57:39 GMT', Date.UTC(2026, 7, 29, 18, 0)],  // 08/30 02:00 CST
+  ['Sun, 30 Aug 2026 03:36:09 GMT', Date.UTC(2026, 7, 30, 6, 0)],   // 08/30 14:00 CST
+  ['Fri, 23 Oct 2026 09:41:25 GMT', Date.UTC(2026, 9, 23, 12, 0)],  // 10/23 20:00 CST
+];
+
+test('由發布時間推出預報基準', () => {
+  for (const [issued, expected] of BASES) {
+    assert.equal(forecastBase(Date.parse(issued)), expected, issued);
+  }
+  assert.equal(forecastBase(NaN), null);
+});
+
+test('基準落在界線上時不會往後跳一格', () => {
+  // 剛好 20:00 CST 發布 → 基準就是 20:00，不是隔天 02:00
+  const onBoundary = Date.UTC(2026, 9, 23, 12, 0); // 10/23 20:00 CST
+  assert.equal(forecastBase(onBoundary), onBoundary);
+  // 晚一分鐘才上架 → 只能退到下一個界線，這是已知的極限
+  assert.equal(forecastBase(onBoundary + 60000), Date.UTC(2026, 9, 23, 18, 0));
+});
+
+test('時距涵蓋的區間', () => {
+  const base = Date.UTC(2026, 9, 23, 12, 0); // 10/23 20:00 CST
+  // 實測：6 小時 +24 → 10/24 14:00～20:00
+  const a = frameWindow(base, 6, 24);
+  assert.equal(a.start, Date.UTC(2026, 9, 24, 6, 0));
+  assert.equal(a.end, Date.UTC(2026, 9, 24, 12, 0));
+  // 實測：12 小時 +24 → 10/24 08:00～20:00
+  const b = frameWindow(base, 12, 24);
+  assert.equal(b.start, Date.UTC(2026, 9, 24, 0, 0));
+  assert.equal(b.end, Date.UTC(2026, 9, 24, 12, 0));
+});
+
+test('按鈕標示用起始時間加上日期前綴', () => {
+  const base = Date.UTC(2026, 9, 23, 12, 0);        // 10/23 20:00 CST
+  const now = Date.UTC(2026, 9, 23, 9, 41);          // 10/23 17:41 CST
+  assert.equal(frameLabel(base, 6, 6, now), '今20');
+  assert.equal(frameLabel(base, 6, 12, now), '明02');
+  assert.equal(frameLabel(base, 6, 24, now), '明14');
+  assert.equal(frameLabel(base, 6, 48, now), '後14');
+  assert.equal(frameLabel(base, 12, 12, now), '今20');
+  // 隔天才打開頁面，起始時間就變成「昨」
+  assert.equal(frameLabel(base, 6, 6, Date.UTC(2026, 9, 24, 9, 0)), '昨20');
+  // 沒有基準時維持原本的 +N
+  assert.equal(frameLabel(null, 6, 24, now), '+24');
+});
+
+test('完整區間文字', () => {
+  const base = Date.UTC(2026, 9, 23, 12, 0);
+  assert.equal(frameRangeText(base, 6, 24), '10/24 14:00 ～ 20:00');
+  assert.equal(frameRangeText(base, 6, 6), '10/23 20:00 ～ 10/24 02:00');
+  assert.equal(frameRangeText(null, 6, 6), '6 小時累積，+6 小時');
 });

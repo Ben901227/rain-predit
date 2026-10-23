@@ -4,6 +4,7 @@ import {
   geocodeUrl, parseGeocodeResults,
   rainUrl, decodeRainGrid, rainLevelAt, rainText, rainColor, RAIN_UNKNOWN,
   sameSpot, isFavourite, toggleFavourite, parseFavourites, MAX_FAVOURITES,
+  forecastBase, frameLabel, frameRangeText,
 } from './qpf.js';
 
 const STORE_KEY = 'rain-predit.location';
@@ -33,6 +34,8 @@ const state = {
   frame: { kind: 6, hour: 6 },
   target: null,
   view: 'fit', // 'fit' 全台 | 'focus' 放大到點位
+  base: null,   // 預報基準時刻，由網格的 issued 推出；推不出來就退回 +N 標示
+  issued: null,
   scale: 1,
   tx: 0,
   ty: 0,
@@ -140,6 +143,26 @@ function zoomAbout(factor, cx, cy) {
 const pointers = new Map();
 let pinchPrev = null;
 let lastTap = 0;
+let swipeFrom = null; // 單指按下的起點，用來分辨「滑動切時段」與「拖曳平移」
+
+// 整張圖都塞得進視窗時，拖曳不會有任何視覺效果（clampPan 會把它置中），
+// 這時水平滑動拿來切換時段才不會跟平移打架。
+function mapFitsViewport() {
+  return IMG_W * state.scale <= viewport.clientWidth + 1 &&
+    IMG_H * state.scale <= viewport.clientHeight + 1;
+}
+
+const SWIPE_MIN_PX = 48;   // 要夠長才算滑動，避免把點擊的手震誤判
+const SWIPE_RATIO = 1.5;   // 水平位移要明顯多於垂直，才不會把縱向捲動誤判
+const SWIPE_MAX_MS = 700;
+
+/** 在同一排（6 或 12 小時）裡往前後移動一格，到頭就停住。 */
+function shiftFrame(delta) {
+  const row = FRAMES.find((f) => f.kind === state.frame.kind);
+  const i = row.hours.indexOf(state.frame.hour);
+  const next = clamp(i + delta, 0, row.hours.length - 1);
+  if (next !== i) setFrame(state.frame.kind, row.hours[next]);
+}
 
 function viewportPoint(e) {
   const r = viewport.getBoundingClientRect();
@@ -150,6 +173,7 @@ viewport.addEventListener('pointerdown', (e) => {
   viewport.setPointerCapture(e.pointerId);
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
   pinchPrev = null;
+  swipeFrom = pointers.size === 1 ? { x: e.clientX, y: e.clientY, t: Date.now() } : null;
 });
 
 viewport.addEventListener('pointermove', (e) => {
@@ -158,7 +182,9 @@ viewport.addEventListener('pointermove', (e) => {
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
   if (pointers.size === 1) {
-    userAdjusted = true;
+    // 圖整張塞得下時拖曳沒有效果，別因此把視野標記成「使用者調整過」，
+    // 否則之後的 relayout 不會重新套用預設視野
+    if (!mapFitsViewport()) userAdjusted = true;
     state.tx += e.clientX - prev.x;
     state.ty += e.clientY - prev.y;
     render();
@@ -181,6 +207,21 @@ function endPointer(e) {
   pinchPrev = null;
   if (pointers.size === 0 && e.type === 'pointerup') {
     const now = Date.now();
+
+    // 未放大時的水平滑動＝切換時段
+    if (swipeFrom && mapFitsViewport()) {
+      const dx = e.clientX - swipeFrom.x;
+      const dy = e.clientY - swipeFrom.y;
+      if (Math.abs(dx) >= SWIPE_MIN_PX && Math.abs(dx) > Math.abs(dy) * SWIPE_RATIO &&
+          now - swipeFrom.t <= SWIPE_MAX_MS) {
+        swipeFrom = null;
+        lastTap = 0; // 滑動不該被接著算成雙擊
+        shiftFrame(dx < 0 ? 1 : -1); // 往左滑看之後的時段
+        return;
+      }
+    }
+    swipeFrom = null;
+
     if (now - lastTap < 320) {
       state.scale > minScale() * 1.5 ? fitWhole() : focusTarget();
       lastTap = 0;
@@ -212,7 +253,8 @@ function buildFrames() {
       const btn = document.createElement('button');
       btn.type = 'button';
       const label = document.createElement('span');
-      label.textContent = `+${hour}`;
+      label.className = 'when';
+      label.textContent = frameLabel(state.base, kind, hour, Date.now());
       const bar = document.createElement('i'); // 該時距在點位上的雨量色階
       bar.className = 'lvl';
       btn.append(label, bar);
@@ -223,6 +265,31 @@ function buildFrames() {
     }
     framesNav.append(row);
   }
+}
+
+/** 基準時刻一確定（或 CWA 換版）就把 12 顆按鈕的時間標示重畫。 */
+function relabelFrames() {
+  const now = Date.now();
+  for (const btn of framesNav.querySelectorAll('button')) {
+    const kind = Number(btn.dataset.kind);
+    const hour = Number(btn.dataset.hour);
+    btn.querySelector('.when').textContent = frameLabel(state.base, kind, hour, now);
+    btn.title = `${kind} 小時累積 · ${frameRangeText(state.base, kind, hour)}`;
+  }
+}
+
+/**
+ * 網格裡的 issued 是唯一能推出有效時間的線索，拿到就更新標示。
+ * 只採用「更新的」發布時間：12 份網格正常來自同一次執行，但 CWA 若在產生
+ * 途中換版就會出現兩種時間，不設限的話標示會隨著看哪一格而跳來跳去。
+ */
+function noteIssued(grid) {
+  if (!grid || !grid.issued) return;
+  const at = Date.parse(grid.issued);
+  if (!Number.isFinite(at) || (state.base !== null && at <= Date.parse(state.issued))) return;
+  state.issued = grid.issued;
+  state.base = forecastBase(at);
+  relabelFrames();
 }
 
 function markActiveFrame() {
@@ -334,6 +401,7 @@ async function updateRain() {
     return;
   }
   if (seq !== rainSeq) return;
+  noteIssued(grid);
 
   const level = levelAtTarget(grid);
   const text = rainText(level);
@@ -627,6 +695,10 @@ let lastVH = 0;
 buildFrames();
 restore();
 setFrame(6, 6);
+
+// 網格的 issued 是唯一能推出各時段實際時間的線索。還沒選地點時不會有人去載
+// 網格，按鈕就會一直停在 +N，所以這裡先主動抓一份（之後選地點也用得到）。
+loadGrid(state.frame.kind, state.frame.hour).then(noteIssued).catch(() => {});
 
 if (!relayout()) window.addEventListener('load', relayout, { once: true });
 window.addEventListener('resize', relayout);
