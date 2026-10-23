@@ -1,5 +1,5 @@
 import {
-  IMG_W, IMG_H, FRAMES, CROP_LEGEND, CROP_TIMESTAMP, PX_PER_DEG_LON,
+  IMG_W, IMG_H, FRAMES, CROP_LEGEND, PX_PER_DEG_LON,
   lonLatToPixel, isInRange, cacheBustToken, frameUrl, parseLocation, formatCoords,
   geocodeUrl, parseGeocodeResults,
   rainUrl, decodeRainGrid, rainLevelAt, rainText, rainColor, RAIN_UNKNOWN,
@@ -19,7 +19,6 @@ const pin = $('#pin');
 const overlayMsg = $('#overlayMsg');
 const legendPane = $('#legendPane');
 const legendBox = $('#legend');
-const timestampBox = $('#timestamp');
 const framesNav = $('#frames');
 const locForm = $('#locForm');
 const locInput = $('#locInput');
@@ -64,8 +63,6 @@ function layoutCrops() {
   );
   applyCrop(legendBox, CROP_LEGEND, legendScale);
 
-  const tsScale = clamp(availW / (CROP_TIMESTAMP.x1 - CROP_TIMESTAMP.x0), 0.2, 0.55);
-  applyCrop(timestampBox, CROP_TIMESTAMP, tsScale);
 }
 
 /* ---------- 檢視變換 ---------- */
@@ -73,7 +70,7 @@ function layoutCrops() {
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
 // 使用者拖曳或縮放過之後，版面變動只平移視野；否則重新套用預設視野。
-// 色階與時間列是圖片載入後才出現的，會縮小 viewport，這時必須重算而不是沿用舊倍率。
+// 色階是圖片載入後才出現的，會縮小 viewport，這時必須重算而不是沿用舊倍率。
 let userAdjusted = false;
 
 function minScale() {
@@ -347,13 +344,12 @@ function setFrame(kind, hour) {
   const pre = new Image();
   pre.onload = () => {
     clearTimeout(overlayTimer);
-    for (const img of [mapImg, legendBox.querySelector('img'), timestampBox.querySelector('img')]) {
+    for (const img of [mapImg, legendBox.querySelector('img')]) {
       img.src = url;
     }
-    timestampBox.hidden = false;
     legendPane.hidden = false;
     hideOverlay();
-    relayout(); // 時間列與色階首次出現會壓縮 #stage
+    relayout(); // 色階首次出現會壓縮 #stage
     prefetchNeighbours(kind, hour);
     if (!firstFrameShown) {
       firstFrameShown = true;

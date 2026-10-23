@@ -15,9 +15,8 @@ const PROJ = {
 // 圖框內緣。左上角雖有金門／馬祖放大框，但兩者的真實座標本來就在圖幅外。
 export const FRAME = { x0: 13, y0: 152, x1: 1230, y1: 1488 };
 
-// 從原圖裁出的區塊（實測 ink 邊界）。
+// 從原圖裁出的色階區塊（實測 ink 邊界）。
 export const CROP_LEGEND = { x0: 1075, y0: 685, x1: 1200, y1: 1422 };
-export const CROP_TIMESTAMP = { x0: 45, y0: 52, x1: 890, y1: 150 };
 
 export const PX_PER_DEG_LON = PROJ.pxPerDegLon;
 
